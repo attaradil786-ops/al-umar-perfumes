@@ -41,11 +41,15 @@ const nextConfig = {
   },
 };
 
-export default withSentryConfig(nextConfig, {
-  silent: true,
-  org: 'al-umar-perfumes',
-  project: 'al-umar-next',
-  widenClientFileUpload: true,
-  hideSourceMaps: true,
-  disableLogger: true,
-});
+const hasSentry = Boolean(process.env.NEXT_PUBLIC_SENTRY_DSN || process.env.SENTRY_AUTH_TOKEN);
+
+export default hasSentry
+  ? withSentryConfig(nextConfig, {
+      silent: true,
+      org: 'al-umar-perfumes',
+      project: 'al-umar-next',
+      widenClientFileUpload: true,
+      hideSourceMaps: true,
+      disableLogger: true,
+    })
+  : nextConfig;

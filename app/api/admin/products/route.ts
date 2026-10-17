@@ -62,6 +62,8 @@ export async function POST(request: NextRequest) {
       isNewArrival,
       taxRate,
       hsnCode,
+      unitType,
+      variants,
     } = body;
 
     if (!name || !description || !category || price === undefined) {
@@ -80,6 +82,33 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: `A product with slug "${generatedSlug}" already exists.` }, { status: 400 });
     }
 
+    let sanitizedVariants: any = Prisma.DbNull;
+    if (Array.isArray(variants) && variants.length > 0) {
+      const clean = variants
+        .filter((v: any) => v && typeof v === 'object' && v.label)
+        .map((v: any, i: number) => ({
+          id: String(v.id || `var-${i + 1}-${Date.now()}`),
+          label: String(v.label).trim(),
+          dimensionOrSize: v.dimensionOrSize ? String(v.dimensionOrSize).trim() : undefined,
+          unit: v.unit ? String(v.unit).trim() : undefined,
+          price: Math.max(1, Math.round(Number(v.price) || 0)),
+          mrp: v.mrp ? Math.max(Math.round(Number(v.mrp)), Math.round(Number(v.price) || 0)) : null,
+          stock: Math.max(0, Math.round(Number(v.stock) || 0)),
+        }));
+      if (clean.length > 0) {
+        sanitizedVariants = clean;
+      }
+    }
+
+    // If variants exist and stock wasn't manually set, calculate total stock as sum of variants
+    let totalStock = stock !== undefined ? Math.max(0, Math.round(Number(stock))) : 10;
+    if (Array.isArray(sanitizedVariants) && sanitizedVariants.length > 0) {
+      const variantStockSum = sanitizedVariants.reduce((sum: number, v: any) => sum + (v.stock || 0), 0);
+      if (stock === undefined || Number(stock) === 0) {
+        totalStock = variantStockSum;
+      }
+    }
+
     const product = await prisma.product.create({
       data: {
         name: name.trim(),
@@ -88,13 +117,15 @@ export async function POST(request: NextRequest) {
         category: category.toLowerCase().trim(),
         price: Math.max(1, Math.round(Number(price))),
         mrp: mrp ? Math.max(Math.round(Number(price)), Math.round(Number(mrp))) : Math.round(Number(price) * 1.25),
-        stock: stock !== undefined ? Math.max(0, Math.round(Number(stock))) : 10,
+        stock: totalStock,
         images: Array.isArray(images) && images.length > 0 ? images : ['/images/hero-perfume.jpg'],
         isActive: isActive !== undefined ? Boolean(isActive) : true,
         isBestSeller: Boolean(isBestSeller),
         isNewArrival: Boolean(isNewArrival),
         taxRate: taxRate ? Number(taxRate) : 18,
         hsnCode: hsnCode ? String(hsnCode) : '3303',
+        unitType: unitType ? String(unitType).trim() : (category.toLowerCase().includes('quran') || category.toLowerCase().includes('book') ? 'cm' : 'ml'),
+        variants: sanitizedVariants,
       },
     });
 

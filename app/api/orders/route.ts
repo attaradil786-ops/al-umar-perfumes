@@ -92,13 +92,32 @@ export async function POST(req: Request) {
         );
       }
 
-      // Always derive price from DB - NEVER trust client price
+      // Always derive price from DB variants - NEVER trust client price
       let unitPrice = dbProduct.price;
       const opt = typeof item.size === 'string' ? item.size.trim() : null;
-      if (opt && opt.toLowerCase().includes('12ml')) {
-        unitPrice = Math.round(dbProduct.price * 1.8);
+
+      const rawVariants = Array.isArray(dbProduct.variants) ? (dbProduct.variants as any[]) : [];
+      const matchedVariant = opt
+        ? rawVariants.find(
+            (v: any) => v && typeof v === 'object' && v.label && v.label.toLowerCase() === opt.toLowerCase()
+          )
+        : null;
+
+      if (matchedVariant) {
+        unitPrice = Math.max(1, Math.round(Number(matchedVariant.price) || dbProduct.price));
+        if (matchedVariant.stock !== undefined && matchedVariant.stock < rawQty) {
+          return NextResponse.json(
+            { error: `Only ${matchedVariant.stock} units of "${dbProduct.name} (${matchedVariant.label})" available in stock.` },
+            { status: 400 }
+          );
+        }
+      } else if (opt) {
+        if (opt.toLowerCase().includes('12ml')) {
+          unitPrice = Math.round(dbProduct.price * 1.8);
+        } else if (opt.toLowerCase().includes('3ml')) {
+          unitPrice = Math.round(dbProduct.price * 0.6);
+        }
       }
-      unitPrice = Math.max(dbProduct.price, unitPrice);
 
       calculatedSubtotal += unitPrice * rawQty;
       validatedItems.push({

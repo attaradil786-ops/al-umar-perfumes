@@ -126,6 +126,7 @@ export default async function ProductDetailPage({
 
   const formattedProduct = {
     ...product,
+    variants: Array.isArray(product.variants) ? (product.variants as any) : null,
     reviews: product.reviews.map((r) => ({
       id: r.id,
       name: r.name,
@@ -141,7 +142,7 @@ export default async function ProductDetailPage({
         type="application/ld+json"
         dangerouslySetInnerHTML={{ __html: JSON.stringify(productJsonLd) }}
       />
-      <ProductDetailClient product={formattedProduct} relatedProducts={relatedProducts} />
+      <ProductDetailClient product={formattedProduct as any} relatedProducts={relatedProducts as any} />
     </main>
   );
 }

@@ -4,6 +4,16 @@ import React, { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 
+export interface ProductVariant {
+  id: string;
+  label: string;
+  dimensionOrSize?: string;
+  unit?: string;
+  price: number;
+  mrp?: number | null;
+  stock: number;
+}
+
 interface ProductData {
   id?: string;
   name: string;
@@ -19,6 +29,8 @@ interface ProductData {
   isNewArrival: boolean;
   taxRate?: number;
   hsnCode?: string;
+  unitType?: string;
+  variants?: ProductVariant[];
 }
 
 interface ProductFormProps {
@@ -48,12 +60,31 @@ export default function ProductForm({
   const [taxRate, setTaxRate] = useState<number | string>(initialData?.taxRate ?? 18);
   const [hsnCode, setHSNCode] = useState(initialData?.hsnCode || '3303');
 
+  // Dimension & Variants States
+  const [unitType, setUnitType] = useState<string>(
+    initialData?.unitType || (initialData?.category === 'books' ? 'cm' : 'ml')
+  );
+  const [variants, setVariants] = useState<ProductVariant[]>(
+    Array.isArray(initialData?.variants) ? (initialData.variants as ProductVariant[]) : []
+  );
+
   const [isUploading, setIsUploading] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [errorMsg, setErrorMsg] = useState('');
   const [toastMsg, setToastMsg] = useState('');
 
   const basePath = `/${adminPath}`;
+
+  const handleCategoryChange = (val: string) => {
+    setCategory(val);
+    if (variants.length === 0) {
+      if (val === 'books') {
+        setUnitType('cm');
+      } else if (val === 'attar') {
+        setUnitType('ml');
+      }
+    }
+  };
 
   const handleNameChange = (val: string) => {
     setName(val);
@@ -65,6 +96,67 @@ export default function ProductForm({
           .replace(/(^-|-$)/g, '')
       );
     }
+  };
+
+  // Preset Loaders
+  const loadPerfumePresets = () => {
+    setUnitType('ml');
+    const base = Number(price) || 499;
+    setVariants([
+      { id: `var-3ml-${Date.now()}`, label: '3ml', dimensionOrSize: '3', unit: 'ml', price: Math.round(base * 0.6), mrp: Math.round(base * 0.75), stock: 15 },
+      { id: `var-6ml-${Date.now()}`, label: '6ml', dimensionOrSize: '6', unit: 'ml', price: base, mrp: mrp ? Number(mrp) : Math.round(base * 1.3), stock: 25 },
+      { id: `var-12ml-${Date.now()}`, label: '12ml', dimensionOrSize: '12', unit: 'ml', price: Math.round(base * 1.8), mrp: Math.round(base * 2.3), stock: 20 },
+      { id: `var-50ml-${Date.now()}`, label: '50ml (Spray)', dimensionOrSize: '50', unit: 'ml', price: Math.round(base * 4.5), mrp: Math.round(base * 5.5), stock: 10 },
+    ]);
+  };
+
+  const loadQuranPresets = () => {
+    setUnitType('cm');
+    const base = Number(price) || 350;
+    setVariants([
+      { id: `var-q-pocket-${Date.now()}`, label: 'Pocket (10x14 cm)', dimensionOrSize: '10x14', unit: 'cm', price: base, mrp: Math.round(base * 1.25), stock: 20 },
+      { id: `var-q-medium-${Date.now()}`, label: 'Medium (14x20 cm)', dimensionOrSize: '14x20', unit: 'cm', price: Math.round(base * 1.7), mrp: Math.round(base * 2.1), stock: 30 },
+      { id: `var-q-large-${Date.now()}`, label: 'Large (18x25 cm)', dimensionOrSize: '18x25', unit: 'cm', price: Math.round(base * 2.5), mrp: Math.round(base * 3.1), stock: 15 },
+      { id: `var-q-jumbo-${Date.now()}`, label: 'Deluxe Jumbo (20x28 cm)', dimensionOrSize: '20x28', unit: 'cm', price: Math.round(base * 3.8), mrp: Math.round(base * 4.8), stock: 8 },
+    ]);
+  };
+
+  const loadWeightPresets = () => {
+    setUnitType('g');
+    const base = Number(price) || 500;
+    setVariants([
+      { id: `var-w-12g-${Date.now()}`, label: '12 grams', dimensionOrSize: '12', unit: 'g', price: base, mrp: Math.round(base * 1.25), stock: 15 },
+      { id: `var-w-25g-${Date.now()}`, label: '25 grams', dimensionOrSize: '25', unit: 'g', price: Math.round(base * 1.9), mrp: Math.round(base * 2.3), stock: 20 },
+      { id: `var-w-50g-${Date.now()}`, label: '50 grams', dimensionOrSize: '50', unit: 'g', price: Math.round(base * 3.6), mrp: Math.round(base * 4.2), stock: 10 },
+      { id: `var-w-100g-${Date.now()}`, label: '100 grams', dimensionOrSize: '100', unit: 'g', price: Math.round(base * 6.8), mrp: Math.round(base * 8.0), stock: 5 },
+    ]);
+  };
+
+  const addVariant = () => {
+    setVariants(prev => [
+      ...prev,
+      {
+        id: `var-${Date.now()}`,
+        label: unitType === 'cm' ? 'Medium (14x20 cm)' : unitType === 'g' ? '25g' : '6ml',
+        dimensionOrSize: '',
+        unit: unitType,
+        price: Number(price) || 499,
+        mrp: mrp ? Number(mrp) : null,
+        stock: 10,
+      },
+    ]);
+  };
+
+  const updateVariant = (index: number, field: keyof ProductVariant, value: any) => {
+    setVariants(prev => {
+      const next = [...prev];
+      next[index] = { ...next[index], [field]: value };
+      return next;
+    });
+  };
+
+  const removeVariant = (index: number) => {
+    setVariants(prev => prev.filter((_, i) => i !== index));
   };
 
   const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -108,6 +200,10 @@ export default function ProductForm({
     setIsSubmitting(true);
 
     try {
+      const totalStockSum = variants.length > 0
+        ? variants.reduce((sum, v) => sum + (Number(v.stock) || 0), 0)
+        : Number(stock);
+
       const payload = {
         name,
         slug,
@@ -115,13 +211,15 @@ export default function ProductForm({
         category,
         price: Number(price),
         mrp: mrp ? Number(mrp) : undefined,
-        stock: Number(stock),
+        stock: totalStockSum,
         images: images.length > 0 ? images : ['/images/hero-perfume.jpg'],
         isActive,
         isBestSeller,
         isNewArrival,
         taxRate: Number(taxRate),
         hsnCode,
+        unitType,
+        variants: variants.length > 0 ? variants : null,
       };
 
       const url = isEdit ? `/api/admin/products/${initialData?.id}` : '/api/admin/products';
@@ -328,6 +426,231 @@ export default function ProductForm({
               </div>
             </div>
           </div>
+
+          {/* Dimensions, Volumes & Custom Sizes */}
+          <div className="bg-white p-6 rounded-2xl border border-[#E8DCC8] shadow-sm space-y-5">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-[#E8DCC8] pb-3">
+              <div>
+                <h3 className="font-serif text-base font-bold text-[#553E23] flex items-center gap-2">
+                  <span>📏</span>
+                  <span>Dimensions, Sizes & Volume Customizer</span>
+                </h3>
+                <p className="text-xs text-[#7A5B37] mt-0.5">
+                  Configure perfume ml bottles, Holy Quran cm dimensions, or custom weight & stock options.
+                </p>
+              </div>
+              <span className="text-xs font-semibold px-2.5 py-1 rounded-full bg-[#1E6B5C]/10 text-[#1E6B5C] self-start sm:self-auto">
+                {variants.length} {variants.length === 1 ? 'Variant' : 'Variants'} active
+              </span>
+            </div>
+
+            {/* Dimension / Unit Selector */}
+            <div>
+              <label className="block text-xs font-bold text-[#553E23] uppercase tracking-wider mb-2">
+                Choose Dimension / Unit Type
+              </label>
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
+                <button
+                  type="button"
+                  onClick={() => setUnitType('ml')}
+                  className={`px-3 py-2.5 rounded-xl border text-xs font-bold flex items-center justify-center gap-1.5 transition cursor-pointer ${
+                    unitType === 'ml'
+                      ? 'border-[#1E6B5C] bg-[#1E6B5C] text-white shadow-sm'
+                      : 'border-[#E8DCC8] bg-[#FFF8EC]/40 text-[#553E23] hover:border-[#1E6B5C]/60'
+                  }`}
+                >
+                  <span>🧴</span>
+                  <span>Volume (ml)</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setUnitType('cm')}
+                  className={`px-3 py-2.5 rounded-xl border text-xs font-bold flex items-center justify-center gap-1.5 transition cursor-pointer ${
+                    unitType === 'cm'
+                      ? 'border-[#1E6B5C] bg-[#1E6B5C] text-white shadow-sm'
+                      : 'border-[#E8DCC8] bg-[#FFF8EC]/40 text-[#553E23] hover:border-[#1E6B5C]/60'
+                  }`}
+                >
+                  <span>📖</span>
+                  <span>Dimensions (cm)</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setUnitType('g')}
+                  className={`px-3 py-2.5 rounded-xl border text-xs font-bold flex items-center justify-center gap-1.5 transition cursor-pointer ${
+                    unitType === 'g'
+                      ? 'border-[#1E6B5C] bg-[#1E6B5C] text-white shadow-sm'
+                      : 'border-[#E8DCC8] bg-[#FFF8EC]/40 text-[#553E23] hover:border-[#1E6B5C]/60'
+                  }`}
+                >
+                  <span>⚖️</span>
+                  <span>Weight (grams)</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setUnitType('size')}
+                  className={`px-3 py-2.5 rounded-xl border text-xs font-bold flex items-center justify-center gap-1.5 transition cursor-pointer ${
+                    unitType === 'size'
+                      ? 'border-[#1E6B5C] bg-[#1E6B5C] text-white shadow-sm'
+                      : 'border-[#E8DCC8] bg-[#FFF8EC]/40 text-[#553E23] hover:border-[#1E6B5C]/60'
+                  }`}
+                >
+                  <span>🏷️</span>
+                  <span>Custom / Size</span>
+                </button>
+              </div>
+            </div>
+
+            {/* Quick Presets Buttons */}
+            <div className="bg-[#FFF8EC]/60 border border-[#E8DCC8] rounded-xl p-3 flex flex-wrap items-center gap-2">
+              <span className="text-[11px] font-bold text-[#7A5B37] mr-1">One-Click Presets:</span>
+              <button
+                type="button"
+                onClick={loadPerfumePresets}
+                className="text-xs bg-white border border-[#E8DCC8] hover:border-[#1E6B5C] text-[#553E23] hover:text-[#1E6B5C] px-3 py-1.5 rounded-lg font-semibold transition cursor-pointer shadow-2xs"
+              >
+                🧴 Perfume ml (3ml, 6ml, 12ml, 50ml)
+              </button>
+              <button
+                type="button"
+                onClick={loadQuranPresets}
+                className="text-xs bg-white border border-[#E8DCC8] hover:border-[#1E6B5C] text-[#553E23] hover:text-[#1E6B5C] px-3 py-1.5 rounded-lg font-semibold transition cursor-pointer shadow-2xs"
+              >
+                📖 Holy Quran cm (Pocket 10x14cm, Medium 14x20cm, Large 18x25cm)
+              </button>
+              <button
+                type="button"
+                onClick={loadWeightPresets}
+                className="text-xs bg-white border border-[#E8DCC8] hover:border-[#1E6B5C] text-[#553E23] hover:text-[#1E6B5C] px-3 py-1.5 rounded-lg font-semibold transition cursor-pointer shadow-2xs"
+              >
+                ⚖️ Weight g (12g, 25g, 50g, 100g)
+              </button>
+            </div>
+
+            {/* Variants Table */}
+            <div className="space-y-3">
+              {variants.length === 0 ? (
+                <div className="text-center py-6 border-2 border-dashed border-[#E8DCC8] rounded-xl bg-[#FFF8EC]/20">
+                  <div className="text-xl mb-1">📦</div>
+                  <p className="text-xs font-semibold text-[#553E23]">No custom sizes/dimensions added yet.</p>
+                  <p className="text-[11px] text-[#7A5B37] mt-0.5">
+                    This product will use the single default price (₹{price || 0}) and stock ({stock || 0}).
+                  </p>
+                  <button
+                    type="button"
+                    onClick={addVariant}
+                    className="mt-3 bg-[#1E6B5C] hover:bg-[#165A4A] text-white px-4 py-1.5 rounded-lg text-xs font-bold transition cursor-pointer shadow-xs"
+                  >
+                    + Add Size / Dimension Option
+                  </button>
+                </div>
+              ) : (
+                <div className="space-y-2.5">
+                  <div className="hidden sm:grid grid-cols-12 gap-2 text-[11px] font-bold uppercase tracking-wider text-[#7A5B37] px-2">
+                    <div className="col-span-4">Size / Dimension Label *</div>
+                    <div className="col-span-3">Selling Price (₹) *</div>
+                    <div className="col-span-2">MRP (₹)</div>
+                    <div className="col-span-2">Stock (Qty) *</div>
+                    <div className="col-span-1 text-center">Action</div>
+                  </div>
+
+                  {variants.map((v, idx) => (
+                    <div
+                      key={v.id || idx}
+                      className="grid grid-cols-1 sm:grid-cols-12 gap-2 bg-[#FFF8EC]/30 border border-[#E8DCC8] p-3 rounded-xl items-center"
+                    >
+                      <div className="sm:col-span-4">
+                        <label className="sm:hidden block text-[10px] font-bold text-[#7A5B37] uppercase mb-0.5">
+                          Size / Dimension Label *
+                        </label>
+                        <input
+                          type="text"
+                          required
+                          value={v.label}
+                          onChange={e => updateVariant(idx, 'label', e.target.value)}
+                          placeholder={unitType === 'cm' ? 'e.g. Medium (14x20 cm)' : unitType === 'g' ? 'e.g. 25g' : 'e.g. 12ml'}
+                          className="w-full px-3 py-1.5 rounded-lg border border-[#E8DCC8] bg-white text-xs font-semibold text-[#553E23] focus:ring-2 focus:ring-[#1E6B5C] outline-none"
+                        />
+                      </div>
+
+                      <div className="sm:col-span-3">
+                        <label className="sm:hidden block text-[10px] font-bold text-[#7A5B37] uppercase mb-0.5">
+                          Selling Price (₹) *
+                        </label>
+                        <input
+                          type="number"
+                          required
+                          min={1}
+                          value={v.price}
+                          onChange={e => updateVariant(idx, 'price', Number(e.target.value))}
+                          placeholder="499"
+                          className="w-full px-3 py-1.5 rounded-lg border border-[#E8DCC8] bg-white text-xs font-bold text-[#1E6B5C] focus:ring-2 focus:ring-[#1E6B5C] outline-none"
+                        />
+                      </div>
+
+                      <div className="sm:col-span-2">
+                        <label className="sm:hidden block text-[10px] font-bold text-[#7A5B37] uppercase mb-0.5">
+                          MRP (₹)
+                        </label>
+                        <input
+                          type="number"
+                          min={0}
+                          value={v.mrp ?? ''}
+                          onChange={e => updateVariant(idx, 'mrp', e.target.value ? Number(e.target.value) : null)}
+                          placeholder="699"
+                          className="w-full px-3 py-1.5 rounded-lg border border-[#E8DCC8] bg-white text-xs text-[#7A5B37] focus:ring-2 focus:ring-[#1E6B5C] outline-none"
+                        />
+                      </div>
+
+                      <div className="sm:col-span-2">
+                        <label className="sm:hidden block text-[10px] font-bold text-[#7A5B37] uppercase mb-0.5">
+                          Stock Quantity *
+                        </label>
+                        <input
+                          type="number"
+                          required
+                          min={0}
+                          value={v.stock}
+                          onChange={e => updateVariant(idx, 'stock', Number(e.target.value))}
+                          placeholder="10"
+                          className="w-full px-3 py-1.5 rounded-lg border border-[#E8DCC8] bg-white text-xs font-semibold text-[#553E23] focus:ring-2 focus:ring-[#1E6B5C] outline-none"
+                        />
+                      </div>
+
+                      <div className="sm:col-span-1 flex justify-center pt-1 sm:pt-0">
+                        <button
+                          type="button"
+                          onClick={() => removeVariant(idx)}
+                          className="text-red-600 hover:text-red-700 hover:bg-red-50 p-1.5 rounded-lg transition text-xs font-bold cursor-pointer"
+                          title="Remove size option"
+                        >
+                          🗑️
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+
+                  <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 pt-2">
+                    <button
+                      type="button"
+                      onClick={addVariant}
+                      className="bg-white border border-[#1E6B5C] text-[#1E6B5C] hover:bg-[#1E6B5C] hover:text-white px-4 py-2 rounded-lg text-xs font-bold transition flex items-center gap-1.5 cursor-pointer"
+                    >
+                      <span>+</span>
+                      <span>Add Another Size / Dimension</span>
+                    </button>
+
+                    <div className="text-xs text-[#7A5B37] bg-[#FFF8EC] border border-[#E8DCC8] px-3 py-1.5 rounded-lg font-medium">
+                      Total Stock across all sizes: <strong className="text-[#553E23]">{variants.reduce((acc, curr) => acc + (Number(curr.stock) || 0), 0)} units</strong>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
         </div>
 
         {/* Right Column: Category & Images */}
@@ -344,7 +667,7 @@ export default function ProductForm({
               </label>
               <select
                 value={category}
-                onChange={e => setCategory(e.target.value)}
+                onChange={e => handleCategoryChange(e.target.value)}
                 className="w-full px-3.5 py-2.5 rounded-lg border border-[#E8DCC8] bg-[#FFF8EC]/30 text-sm font-semibold focus:ring-2 focus:ring-[#1E6B5C] outline-none text-[#553E23]"
               >
                 <option value="attar">Attars & Perfumes</option>

@@ -7,6 +7,16 @@ import { useCart } from '@/context/CartContext';
 import ProductCard from '@/components/storefront/ProductCard';
 import { trackViewItem } from '@/lib/analytics';
 
+interface ProductVariant {
+  id: string;
+  label: string;
+  dimensionOrSize?: string;
+  unit?: string;
+  price: number;
+  mrp?: number | null;
+  stock: number;
+}
+
 interface ProductProps {
   id: string;
   slug: string;
@@ -19,6 +29,8 @@ interface ProductProps {
   images: string[];
   rating: number;
   reviewsCount: number;
+  unitType?: string | null;
+  variants?: ProductVariant[] | null;
   reviews: Array<{
     id: string;
     name: string;
@@ -40,9 +52,14 @@ export default function ProductDetailClient({
   const router = useRouter();
   const { addToCart } = useCart();
 
+  const rawVariants = Array.isArray(product.variants) ? (product.variants as ProductVariant[]) : [];
+  const hasVariants = rawVariants.length > 0;
   const isPerfume = product.category.toLowerCase().includes('attar') || product.category.toLowerCase().includes('perfume');
-  const sizeOptions = isPerfume ? ['3ml', '6ml', '12ml'] : ['Standard Edition'];
-  const [selectedSize, setSelectedSize] = useState<string>(sizeOptions[0]);
+  const defaultSizeOptions = isPerfume ? ['3ml', '6ml', '12ml'] : ['Standard Edition'];
+
+  const [selectedSize, setSelectedSize] = useState<string>(
+    hasVariants ? rawVariants[0].label : defaultSizeOptions[0]
+  );
   const [quantity, setQuantity] = useState(1);
   const [selectedImage, setSelectedImage] = useState(product.images[0] || '/images/hero-perfume.jpg');
   const [activeTab, setActiveTab] = useState<'desc' | 'reviews' | 'shipping'>('desc');
@@ -54,24 +71,21 @@ export default function ProductDetailClient({
   const [submittingReview, setSubmittingReview] = useState(false);
   const [reviewSuccess, setReviewSuccess] = useState(false);
 
-  // Analytics: GA4 & Meta Pixel view_item
-  useEffect(() => {
-    try {
-      trackViewItem({
-        id: product.id,
-        name: product.name,
-        price: product.price,
-        category: product.category,
-      });
-    } catch {
-      // ignore analytics error
-    }
-  }, [product.id, product.name, product.price, product.category]);
+  // Active variant resolution
+  const activeVariant = hasVariants
+    ? rawVariants.find(v => v.label === selectedSize) || rawVariants[0]
+    : null;
 
-  // Calculate size-based price
+  // Calculate size-based price and stock
   let currentPrice = product.price;
   let currentMrp = product.mrp;
-  if (isPerfume) {
+  let currentStock = product.stock;
+
+  if (activeVariant) {
+    currentPrice = activeVariant.price;
+    currentMrp = activeVariant.mrp || (product.mrp ? Math.round(activeVariant.price * (product.mrp / product.price)) : null);
+    currentStock = activeVariant.stock;
+  } else if (isPerfume) {
     if (selectedSize === '6ml') {
       currentPrice = Math.round(product.price * 1.85);
       if (currentMrp) currentMrp = Math.round(currentMrp * 1.85);
@@ -81,7 +95,22 @@ export default function ProductDetailClient({
     }
   }
 
+  // Analytics: GA4 & Meta Pixel view_item
+  useEffect(() => {
+    try {
+      trackViewItem({
+        id: product.id,
+        name: product.name,
+        price: currentPrice,
+        category: product.category,
+      });
+    } catch {
+      // ignore analytics error
+    }
+  }, [product.id, product.name, currentPrice, product.category]);
+
   const handleAddToCart = () => {
+    if (currentStock <= 0) return;
     addToCart(
       {
         id: product.id,
@@ -217,15 +246,22 @@ Link: ${window.location.href}`;
 
             {/* Stock status */}
             <div className="text-xs font-semibold flex items-center gap-1.5 pt-1">
-              {product.stock > 0 ? (
+              {currentStock > 0 ? (
                 <>
                   <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
-                  <span className="text-emerald-700">In Stock • Ready to dispatch in 24 hours</span>
+                  <span className="text-emerald-700">
+                    In Stock • Ready to dispatch in 24 hours
+                    {currentStock <= 5 && (
+                      <strong className="ml-1 text-amber-700 font-bold">(Only {currentStock} left in {selectedSize}!)</strong>
+                    )}
+                  </span>
                 </>
               ) : (
                 <>
                   <span className="w-2 h-2 rounded-full bg-red-500"></span>
-                  <span className="text-red-700">Currently Sold Out</span>
+                  <span className="text-red-700 font-semibold">
+                    Currently Sold Out for <strong>{selectedSize}</strong>
+                  </span>
                 </>
               )}
             </div>
@@ -234,25 +270,74 @@ Link: ${window.location.href}`;
               {product.description}
             </p>
 
-            {/* Size selector */}
+            {/* Size / Dimension selector */}
             <div className="space-y-2 pt-4">
-              <label className="block text-xs font-bold text-[#553E23] uppercase tracking-wider">
-                Select Volume / Size
-              </label>
+              <div className="flex items-center justify-between">
+                <label className="block text-xs font-bold text-[#553E23] uppercase tracking-wider">
+                  {product.unitType === 'cm' || product.category.toLowerCase().includes('book') || product.category.toLowerCase().includes('quran')
+                    ? 'Select Book / Quran Dimension (cm)'
+                    : product.unitType === 'g'
+                    ? 'Select Weight (grams)'
+                    : product.unitType === 'ml' || isPerfume
+                    ? 'Select Volume / Bottle Size (ml)'
+                    : 'Select Size / Option'}
+                </label>
+                {activeVariant && (
+                  <span className="text-[11px] font-semibold text-[#1E6B5C]">
+                    Selected: {activeVariant.label} (₹{currentPrice.toLocaleString('en-IN')})
+                  </span>
+                )}
+              </div>
+
               <div className="flex flex-wrap gap-2.5">
-                {sizeOptions.map((sz) => (
-                  <button
-                    key={sz}
-                    onClick={() => setSelectedSize(sz)}
-                    className={`px-4 py-2 rounded-xl text-xs font-bold transition border ${
-                      selectedSize === sz
-                        ? 'bg-[#1E6B5C] text-[#FFF8EC] border-[#1E6B5C] shadow-sm'
-                        : 'bg-[#FFF8EC] text-[#553E23] border-[#E8DCC8] hover:border-[#1E6B5C]'
-                    }`}
-                  >
-                    {sz}
-                  </button>
-                ))}
+                {hasVariants ? (
+                  rawVariants.map((v) => {
+                    const isSelected = selectedSize === v.label;
+                    const isOutOfStock = v.stock <= 0;
+                    return (
+                      <button
+                        key={v.id || v.label}
+                        type="button"
+                        onClick={() => setSelectedSize(v.label)}
+                        className={`px-3.5 py-2 rounded-xl text-xs font-bold transition border text-left flex flex-col gap-0.5 cursor-pointer ${
+                          isSelected
+                            ? 'bg-[#1E6B5C] text-[#FFF8EC] border-[#1E6B5C] shadow-sm'
+                            : 'bg-[#FFF8EC] text-[#553E23] border-[#E8DCC8] hover:border-[#1E6B5C]'
+                        } ${isOutOfStock ? 'opacity-60' : ''}`}
+                      >
+                        <div className="flex items-center gap-1.5">
+                          <span>{v.label}</span>
+                          {isOutOfStock && (
+                            <span className={`text-[9px] px-1.5 py-0.2 rounded font-bold uppercase ${isSelected ? 'bg-white/20 text-white' : 'bg-red-100 text-red-700'}`}>
+                              Sold out
+                            </span>
+                          )}
+                        </div>
+                        <div className={`text-[10px] ${isSelected ? 'text-[#FFF8EC]/90' : 'text-[#1E6B5C]'} font-semibold`}>
+                          ₹{v.price.toLocaleString('en-IN')}
+                          {v.stock > 0 && v.stock <= 5 && (
+                            <span className="ml-1 text-amber-500 font-bold">• {v.stock} left</span>
+                          )}
+                        </div>
+                      </button>
+                    );
+                  })
+                ) : (
+                  defaultSizeOptions.map((sz) => (
+                    <button
+                      key={sz}
+                      type="button"
+                      onClick={() => setSelectedSize(sz)}
+                      className={`px-4 py-2 rounded-xl text-xs font-bold transition border cursor-pointer ${
+                        selectedSize === sz
+                          ? 'bg-[#1E6B5C] text-[#FFF8EC] border-[#1E6B5C] shadow-sm'
+                          : 'bg-[#FFF8EC] text-[#553E23] border-[#E8DCC8] hover:border-[#1E6B5C]'
+                      }`}
+                    >
+                      {sz}
+                    </button>
+                  ))
+                )}
               </div>
             </div>
 
@@ -263,8 +348,9 @@ Link: ${window.location.href}`;
               </label>
               <div className="inline-flex items-center border border-[#E8DCC8] rounded-xl bg-[#FFF8EC] overflow-hidden">
                 <button
+                  type="button"
                   onClick={() => setQuantity((q) => Math.max(1, q - 1))}
-                  className="px-3.5 py-1.5 text-base text-[#553E23] hover:bg-[#E8DCC8]/40 transition font-bold"
+                  className="px-3.5 py-1.5 text-base text-[#553E23] hover:bg-[#E8DCC8]/40 transition font-bold cursor-pointer"
                 >
                   -
                 </button>
@@ -272,8 +358,9 @@ Link: ${window.location.href}`;
                   {quantity}
                 </span>
                 <button
+                  type="button"
                   onClick={() => setQuantity((q) => q + 1)}
-                  className="px-3.5 py-1.5 text-base text-[#553E23] hover:bg-[#E8DCC8]/40 transition font-bold"
+                  className="px-3.5 py-1.5 text-base text-[#553E23] hover:bg-[#E8DCC8]/40 transition font-bold cursor-pointer"
                 >
                   +
                 </button>
@@ -285,23 +372,25 @@ Link: ${window.location.href}`;
           <div className="space-y-3 pt-6 border-t border-[#E8DCC8]">
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <button
+                type="button"
                 onClick={handleAddToCart}
-                disabled={product.stock <= 0}
-                className="w-full py-3.5 px-6 rounded-xl bg-[#1E6B5C] text-[#FFF8EC] font-serif font-bold text-sm hover:bg-[#165246] transition shadow-md disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                disabled={currentStock <= 0}
+                className="w-full py-3.5 px-6 rounded-xl bg-[#1E6B5C] text-[#FFF8EC] font-serif font-bold text-sm hover:bg-[#165246] transition shadow-md disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 cursor-pointer"
               >
                 <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                   <circle cx="8" cy="21" r="1"/><circle cx="19" cy="21" r="1"/>
                   <path d="M2.05 2.05h2l2.66 12.42a2 2 0 0 0 2 1.58h9.78a2 2 0 0 0 1.95-1.57l1.65-7.43H5.12"/>
                 </svg>
-                ADD TO CART
+                {currentStock <= 0 ? 'SOLD OUT' : 'ADD TO CART'}
               </button>
 
               <button
+                type="button"
                 onClick={handleBuyNow}
-                disabled={product.stock <= 0}
-                className="w-full py-3.5 px-6 rounded-xl bg-[#553E23] text-[#FFF8EC] font-serif font-bold text-sm hover:bg-[#43301a] transition shadow-md disabled:opacity-50"
+                disabled={currentStock <= 0}
+                className="w-full py-3.5 px-6 rounded-xl bg-[#553E23] text-[#FFF8EC] font-serif font-bold text-sm hover:bg-[#43301a] transition shadow-md disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
               >
-                BUY NOW
+                {currentStock <= 0 ? 'SOLD OUT' : 'BUY NOW'}
               </button>
             </div>
 

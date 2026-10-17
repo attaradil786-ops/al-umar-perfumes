@@ -182,6 +182,20 @@ export default function AdminProductsPage({
                       <td className="py-3 px-4">
                         <div className="font-bold text-[#121212]">{product.name}</div>
                         <div className="text-[11px] text-[#7A5B37] font-mono">{product.slug}</div>
+                        {Array.isArray((product as any).variants) && (product as any).variants.length > 0 && (
+                          <div className="flex flex-wrap gap-1 mt-1">
+                            {(product as any).variants.slice(0, 4).map((v: any, vi: number) => (
+                              <span key={vi} className="text-[10px] bg-[#FFF8EC] border border-[#E8DCC8] text-[#553E23] px-1.5 py-0.5 rounded font-medium">
+                                {v.label} (₹{v.price})
+                              </span>
+                            ))}
+                            {(product as any).variants.length > 4 && (
+                              <span className="text-[10px] text-[#7A5B37] font-semibold self-center">
+                                +{(product as any).variants.length - 4} more
+                              </span>
+                            )}
+                          </div>
+                        )}
                       </td>
                       <td className="py-3 px-4">
                         <span className="text-[10px] font-bold uppercase px-2 py-0.5 rounded bg-[#FFF8EC] border border-[#E8DCC8] text-[#553E23]">

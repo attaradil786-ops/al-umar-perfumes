@@ -25,6 +25,8 @@ model Product {
   isNewArrival Boolean     @default(false)
   taxRate      Int         @default(18)
   hsnCode      String      @default("3303")
+  unitType     String?     @default("ml")
+  variants     Json?
   createdAt    DateTime    @default(now())
   updatedAt    DateTime    @updatedAt
   reviews      Review[]

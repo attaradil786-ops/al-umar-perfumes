@@ -34,6 +34,8 @@ export default async function EditProductPage({
         isNewArrival: product.isNewArrival,
         taxRate: product.taxRate,
         hsnCode: product.hsnCode,
+        unitType: product.unitType || (product.category === 'books' ? 'cm' : 'ml'),
+        variants: Array.isArray(product.variants) ? (product.variants as any) : [],
       }}
     />
   );

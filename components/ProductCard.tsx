@@ -13,16 +13,32 @@ interface ProductProps {
     category: string;
     price: number;
     mrp?: number | null;
+    stock?: number;
     images?: string[];
     image_url?: string;
     rating?: number;
     reviewsCount?: number;
+    unitType?: string | null;
+    variants?: any;
   };
 }
 
 export default function ProductCard({ product }: ProductProps) {
   const { addToCart, setQuickViewProduct } = useCart();
   const imageUrl = product.images?.[0] || product.image_url || '/images/hero-perfume.jpg';
+
+  const hasVariants = Array.isArray(product.variants) && product.variants.length > 0;
+  const firstVariant = hasVariants ? product.variants[0] : null;
+  const defaultSize = firstVariant ? firstVariant.label : (product.category === 'books' ? 'Standard' : '6ml');
+  const displayPrice = firstVariant ? firstVariant.price : product.price;
+
+  const handleCardAdd = () => {
+    if (hasVariants && product.variants.length > 1) {
+      setQuickViewProduct(product);
+    } else {
+      addToCart({ ...product, price: displayPrice }, defaultSize, 1);
+    }
+  };
 
   return (
     <div className="bg-white rounded-2xl border border-[#E8DCC8] overflow-hidden shadow-sm hover:shadow-md transition-all duration-300 flex flex-col group">
@@ -52,7 +68,7 @@ export default function ProductCard({ product }: ProductProps) {
             e.stopPropagation();
             setQuickViewProduct(product);
           }}
-          className="absolute bottom-3 right-3 bg-white/95 hover:bg-white text-[#553E23] px-2.5 py-1.5 rounded-xl shadow-md opacity-90 sm:opacity-0 sm:group-hover:opacity-100 transition duration-300 flex items-center gap-1.5 text-[11px] font-bold z-10"
+          className="absolute bottom-3 right-3 bg-white/95 hover:bg-white text-[#553E23] px-2.5 py-1.5 rounded-xl shadow-md opacity-90 sm:opacity-0 sm:group-hover:opacity-100 transition duration-300 flex items-center gap-1.5 text-[11px] font-bold z-10 cursor-pointer"
           title="Quick View Item Info"
           aria-label="Quick View Item Info"
         >
@@ -89,9 +105,12 @@ export default function ProductCard({ product }: ProductProps) {
         <div className="mt-4 pt-3 border-t border-[#E8DCC8] flex items-center justify-between">
           <div>
             <div className="text-base font-bold text-[#553E23]">
-              ₹{product.price.toLocaleString('en-IN')}
+              {hasVariants && product.variants.length > 1 ? (
+                <span className="text-xs font-normal text-[#7A5B37] mr-1">From</span>
+              ) : null}
+              ₹{displayPrice.toLocaleString('en-IN')}
             </div>
-            {product.mrp && product.mrp > product.price && (
+            {product.mrp && product.mrp > displayPrice && (
               <div className="text-[10px] text-[#7A5B37] line-through -mt-0.5">
                 ₹{product.mrp.toLocaleString('en-IN')}
               </div>
@@ -99,10 +118,11 @@ export default function ProductCard({ product }: ProductProps) {
           </div>
 
           <button
-            onClick={() => addToCart(product, '6ml', 1)}
-            className="bg-[#1E6B5C] hover:bg-[#165A4A] text-white text-xs font-bold px-3.5 py-1.5 rounded-lg transition shadow-sm hover:shadow flex items-center gap-1"
+            type="button"
+            onClick={handleCardAdd}
+            className="bg-[#1E6B5C] hover:bg-[#165A4A] text-white text-xs font-bold px-3.5 py-1.5 rounded-lg transition shadow-sm hover:shadow flex items-center gap-1 cursor-pointer"
           >
-            <span>+ Add</span>
+            <span>{hasVariants && product.variants.length > 1 ? 'Options' : '+ Add'}</span>
           </button>
         </div>
       </div>

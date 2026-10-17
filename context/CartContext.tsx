@@ -80,7 +80,9 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
             .map(item => ({
               ...item,
               quantity: Math.min(100, Math.max(1, Math.floor(item.quantity))),
-              size: typeof item.size === 'string' ? item.size.slice(0, 50) : '6ml',
+              size: typeof item.size === 'string' && item.size.trim()
+                ? item.size.slice(0, 50)
+                : (item.category?.toLowerCase().includes('book') || item.category?.toLowerCase().includes('quran') ? 'Standard' : '6ml'),
             }));
           setCart(sanitized);
         } else {
@@ -114,7 +116,9 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
     image_url?: string;
     image?: string;
     category: string;
-  }, size = '6ml', quantity = 1) => {
+  }, size?: string, quantity = 1) => {
+    const isBookOrQuran = product.category?.toLowerCase().includes('book') || product.category?.toLowerCase().includes('quran');
+    const finalSize = size || (isBookOrQuran ? 'Standard Edition' : '6ml');
     const imageUrl = product.image_url || product.image || product.images?.[0] || '/images/hero-perfume.jpg';
 
     // Analytics: GA4 & Meta Pixel add_to_cart
@@ -125,14 +129,14 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
         price: product.price,
         quantity,
         category: product.category,
-        size,
+        size: finalSize,
       });
     } catch {
       // ignore tracking errors
     }
 
     setCart(prev => {
-      const existingIndex = prev.findIndex(item => item.id === product.id && item.size === size);
+      const existingIndex = prev.findIndex(item => item.id === product.id && item.size === finalSize);
       if (existingIndex > -1) {
         const next = [...prev];
         next[existingIndex].quantity += quantity;
@@ -147,7 +151,7 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
           image_url: imageUrl,
           image: imageUrl,
           category: product.category,
-          size,
+          size: finalSize,
           quantity,
           slug: product.slug,
           description: (product as any).description,

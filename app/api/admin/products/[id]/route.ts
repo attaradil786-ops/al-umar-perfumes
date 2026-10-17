@@ -74,6 +74,29 @@ export async function PATCH(
     if (body.isNewArrival !== undefined) dataToUpdate.isNewArrival = Boolean(body.isNewArrival);
     if (body.taxRate !== undefined) dataToUpdate.taxRate = Number(body.taxRate);
     if (body.hsnCode !== undefined) dataToUpdate.hsnCode = String(body.hsnCode);
+    if (body.unitType !== undefined) dataToUpdate.unitType = String(body.unitType).trim();
+    if (body.variants !== undefined) {
+      if (Array.isArray(body.variants) && body.variants.length > 0) {
+        const clean = body.variants
+          .filter((v: any) => v && typeof v === 'object' && v.label)
+          .map((v: any, i: number) => ({
+            id: String(v.id || `var-${i + 1}-${Date.now()}`),
+            label: String(v.label).trim(),
+            dimensionOrSize: v.dimensionOrSize ? String(v.dimensionOrSize).trim() : undefined,
+            unit: v.unit ? String(v.unit).trim() : undefined,
+            price: Math.max(1, Math.round(Number(v.price) || 0)),
+            mrp: v.mrp ? Math.max(Math.round(Number(v.mrp)), Math.round(Number(v.price) || 0)) : null,
+            stock: Math.max(0, Math.round(Number(v.stock) || 0)),
+          }));
+        dataToUpdate.variants = clean.length > 0 ? (clean as any) : Prisma.DbNull;
+        // Optionally update total stock to match variant stock sum if stock was not explicitly passed
+        if (body.stock === undefined && clean.length > 0) {
+          dataToUpdate.stock = clean.reduce((sum: number, v: any) => sum + (v.stock || 0), 0);
+        }
+      } else {
+        dataToUpdate.variants = Prisma.DbNull;
+      }
+    }
 
     const updated = await prisma.product.update({
       where: { id },

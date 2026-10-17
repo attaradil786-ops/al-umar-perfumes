@@ -90,14 +90,34 @@ export async function POST(req: NextRequest) {
         );
       }
 
-      // Base price strictly from DB
+      // Base price and size determination from DB variants
       let unitPrice = dbProduct.price;
-      const opt = typeof item.size === 'string' ? item.size.trim() : '6ml';
-      if (opt.toLowerCase().includes('12ml')) {
-        unitPrice = Math.round(dbProduct.price * 1.8);
+      const opt = typeof item.size === 'string' ? item.size.trim() : '';
+
+      const rawVariants = Array.isArray(dbProduct.variants) ? (dbProduct.variants as any[]) : [];
+      const matchedVariant = rawVariants.find(
+        (v: any) => v && typeof v === 'object' && v.label && v.label.toLowerCase() === opt.toLowerCase()
+      );
+
+      if (matchedVariant) {
+        unitPrice = Math.max(1, Math.round(Number(matchedVariant.price) || dbProduct.price));
+        if (matchedVariant.stock !== undefined && matchedVariant.stock < qty) {
+          return NextResponse.json(
+            {
+              success: false,
+              error: `Only ${matchedVariant.stock} units of "${dbProduct.name} (${matchedVariant.label})" are available in stock.`,
+            },
+            { status: 400 }
+          );
+        }
+      } else {
+        // Fallback for perfumes without explicit variant array
+        if (opt.toLowerCase().includes('12ml')) {
+          unitPrice = Math.round(dbProduct.price * 1.8);
+        } else if (opt.toLowerCase().includes('3ml')) {
+          unitPrice = Math.round(dbProduct.price * 0.6);
+        }
       }
-      // Never allow unitPrice to fall below base DB price
-      unitPrice = Math.max(dbProduct.price, unitPrice);
 
       calculatedSubtotal += unitPrice * qty;
       validatedOrderItems.push({
@@ -105,7 +125,7 @@ export async function POST(req: NextRequest) {
         name: dbProduct.name,
         price: unitPrice,
         quantity: qty,
-        size: opt || '6ml',
+        size: opt || (dbProduct.category?.toLowerCase().includes('book') ? 'Standard' : '6ml'),
       });
     }
 
