@@ -3,7 +3,7 @@ import prisma from '@/lib/prisma';
 
 export async function POST(req: Request) {
   try {
-    const { code, subtotal, shipping = 100 } = await req.json();
+    const { code, subtotal, shipping = 100, phone, email } = await req.json();
 
     if (!code || typeof code !== 'string') {
       return NextResponse.json(
@@ -57,6 +57,41 @@ export async function POST(req: Request) {
         },
         { status: 400 }
       );
+    }
+
+    // Check if user has already used this coupon on an existing order (1 coupon per user rule)
+    if (phone || email) {
+      const cleanPhone = typeof phone === 'string' ? phone.replace(/\D/g, '') : '';
+      const cleanPhone10 = cleanPhone.length >= 10 ? cleanPhone.slice(-10) : '';
+      const cleanEmail = typeof email === 'string' ? email.trim().toLowerCase() : '';
+
+      const orConditions: any[] = [];
+      if (cleanPhone10) {
+        orConditions.push({ phone: { contains: cleanPhone10 } });
+      }
+      if (cleanEmail) {
+        orConditions.push({ email: { equals: cleanEmail, mode: 'insensitive' } });
+      }
+
+      if (orConditions.length > 0) {
+        const priorOrder = await prisma.order.findFirst({
+          where: {
+            couponCode: cleanCode,
+            status: { not: 'Cancelled' },
+            OR: orConditions,
+          },
+        });
+
+        if (priorOrder) {
+          return NextResponse.json(
+            {
+              valid: false,
+              error: 'You have already redeemed this coupon code on a previous order. Each customer may use a coupon code only once.',
+            },
+            { status: 400 }
+          );
+        }
+      }
     }
 
     // Calculate discount based on coupon type

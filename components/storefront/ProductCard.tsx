@@ -44,17 +44,23 @@ export default function ProductCard({ product }: ProductProps) {
           {product.category}
         </span>
 
-        {/* Quick View Button */}
+        {/* Quick View Button (Tap to view details) */}
         <button
-          onClick={() => setQuickViewProduct(product)}
-          className="absolute bottom-3 right-3 bg-white/90 hover:bg-white text-[#553E23] p-2 rounded-xl shadow-md opacity-0 group-hover:opacity-100 transition duration-300"
-          title="Quick View"
-          aria-label="Quick View"
+          type="button"
+          onClick={(e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            setQuickViewProduct(product);
+          }}
+          className="absolute bottom-3 right-3 bg-white/95 hover:bg-white text-[#553E23] px-2.5 py-1.5 rounded-xl shadow-md opacity-90 sm:opacity-0 sm:group-hover:opacity-100 transition duration-300 flex items-center gap-1.5 text-[11px] font-bold z-10"
+          title="Quick View Item Info"
+          aria-label="Quick View Item Info"
         >
-          <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+          <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
             <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" />
             <circle cx="12" cy="12" r="3" />
           </svg>
+          <span className="hidden xs:inline">Info</span>
         </button>
       </div>
 

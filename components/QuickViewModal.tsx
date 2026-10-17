@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { useCart } from '@/context/CartContext';
 
@@ -8,6 +8,21 @@ export default function QuickViewModal() {
   const { quickViewProduct, setQuickViewProduct, addToCart } = useCart();
   const [selectedSize, setSelectedSize] = useState('6ml');
   const [quantity, setQuantity] = useState(1);
+
+  // Freeze background when Quick View is active
+  useEffect(() => {
+    if (quickViewProduct) {
+      const originalOverflow = document.body.style.overflow;
+      const originalTouchAction = document.body.style.touchAction;
+      document.body.style.overflow = 'hidden';
+      document.body.style.touchAction = 'none';
+
+      return () => {
+        document.body.style.overflow = originalOverflow;
+        document.body.style.touchAction = originalTouchAction;
+      };
+    }
+  }, [quickViewProduct]);
 
   if (!quickViewProduct) return null;
 

@@ -124,6 +124,34 @@ export async function POST(req: NextRequest) {
         const usesAvailable = !coupon.maxUses || coupon.usedCount < coupon.maxUses;
         const minOrderMet = calculatedSubtotal >= coupon.minOrder;
 
+        // Enforce 1 use per customer rule
+        const cleanPhone = (phone || '').replace(/\D/g, '');
+        const cleanPhone10 = cleanPhone.length >= 10 ? cleanPhone.slice(-10) : '';
+        const cleanEmail = (email || '').trim().toLowerCase();
+
+        const orConditions: any[] = [];
+        if (cleanPhone10) orConditions.push({ phone: { contains: cleanPhone10 } });
+        if (cleanEmail) orConditions.push({ email: { equals: cleanEmail, mode: 'insensitive' as const } });
+
+        let alreadyRedeemed = false;
+        if (orConditions.length > 0) {
+          const priorOrder = await prisma.order.findFirst({
+            where: {
+              couponCode: cleanCode,
+              status: { not: 'Cancelled' },
+              OR: orConditions,
+            },
+          });
+          if (priorOrder) alreadyRedeemed = true;
+        }
+
+        if (alreadyRedeemed) {
+          return NextResponse.json(
+            { success: false, error: 'You have already redeemed this coupon code on a previous order.' },
+            { status: 400 }
+          );
+        }
+
         if (notExpired && usesAvailable && minOrderMet) {
           appliedCouponCode = coupon.code;
           const typeUpper = (coupon.type || '').toUpperCase();

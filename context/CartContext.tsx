@@ -12,6 +12,11 @@ export interface CartItem {
   category: string;
   quantity: number;
   size?: string;
+  slug?: string;
+  description?: string;
+  rating?: number;
+  mrp?: number | null;
+  images?: string[];
 }
 
 interface CartContextType {
@@ -144,6 +149,11 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
           category: product.category,
           size,
           quantity,
+          slug: product.slug,
+          description: (product as any).description,
+          rating: (product as any).rating,
+          mrp: product.mrp,
+          images: product.images || [imageUrl],
         },
       ];
     });

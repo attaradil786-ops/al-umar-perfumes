@@ -11,7 +11,7 @@ import { trackBeginCheckout } from '@/lib/analytics';
 
 export default function CheckoutPage() {
   const router = useRouter();
-  const { cart, subtotal, clearCart, setCart } = useCart();
+  const { cart, subtotal, clearCart, setCart, removeFromCart, updateQuantity } = useCart();
 
   // Address form fields
   const [formData, setFormData] = useState({
@@ -26,12 +26,48 @@ export default function CheckoutPage() {
 
   const [formErrors, setFormErrors] = useState<Record<string, string>>({});
   const [couponCode, setCouponCode] = useState('');
-  const [appliedCoupon, setAppliedCoupon] = useState<{ code: string; discount: number; message: string } | null>(null);
+  const [appliedCoupon, setAppliedCoupon] = useState<{
+    code: string;
+    discount: number;
+    message: string;
+    minOrder: number;
+    type?: string;
+    value?: number;
+  } | null>(null);
   const [couponLoading, setCouponLoading] = useState(false);
   const [couponError, setCouponError] = useState('');
   const [stockWarnings, setStockWarnings] = useState<string[]>([]);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [checkoutError, setCheckoutError] = useState('');
+
+  // Automatically remove coupon if subtotal falls below minOrder, or dynamically recalculate percentage discount
+  useEffect(() => {
+    if (appliedCoupon) {
+      if (appliedCoupon.minOrder > 0 && subtotal < appliedCoupon.minOrder) {
+        const removedCode = appliedCoupon.code;
+        const requiredMin = appliedCoupon.minOrder;
+        setAppliedCoupon(null);
+        setCouponCode('');
+        setCouponError(
+          `Coupon "${removedCode}" was automatically removed because your cart total (₹${subtotal.toLocaleString('en-IN')}) is below the required minimum of ₹${requiredMin.toLocaleString('en-IN')}.`
+        );
+      } else if (subtotal >= (appliedCoupon.minOrder || 0)) {
+        const typeUpper = (appliedCoupon.type || '').toUpperCase();
+        let dynamicDiscount = appliedCoupon.discount;
+        if (typeUpper === 'PERCENTAGE' || typeUpper === 'PERCENT') {
+          const pct = Math.min(100, Math.max(0, appliedCoupon.value || 0));
+          dynamicDiscount = Math.min(subtotal, Math.round((subtotal * pct) / 100));
+        } else if (typeUpper === 'FREE_SHIPPING' || typeUpper === 'FREESHIPPING') {
+          dynamicDiscount = subtotal >= 1500 ? 0 : 100;
+        } else {
+          dynamicDiscount = Math.min(appliedCoupon.value || 0, subtotal);
+        }
+        if (dynamicDiscount !== appliedCoupon.discount) {
+          setAppliedCoupon(prev => prev ? { ...prev, discount: dynamicDiscount } : null);
+        }
+      }
+    }
+  }, [subtotal, appliedCoupon]);
 
   // Validate cart against server on mount & track begin_checkout
   useEffect(() => {
@@ -90,7 +126,12 @@ export default function CheckoutPage() {
       const res = await fetch('/api/coupons/validate', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ code: couponCode.trim(), subtotal }),
+        body: JSON.stringify({
+          code: couponCode.trim(),
+          subtotal,
+          phone: formData.phone,
+          email: formData.email,
+        }),
       });
       const data = await res.json();
       if (res.ok && data.valid) {
@@ -98,6 +139,9 @@ export default function CheckoutPage() {
           code: data.code,
           discount: data.discount,
           message: data.message,
+          minOrder: data.minOrder || 0,
+          type: data.type,
+          value: data.value,
         });
         setCouponError('');
       } else {
@@ -451,11 +495,40 @@ export default function CheckoutPage() {
                     <div style={{ fontSize: '0.85rem', fontWeight: 600, color: '#121212', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
                       {item.name}
                     </div>
-                    <div style={{ fontSize: '0.75rem', color: '#7A5B37' }}>
-                      {item.size ? `Size: ${item.size} • ` : ''}Qty: {item.quantity}
+                    <div style={{ fontSize: '0.75rem', color: '#7A5B37', display: 'flex', alignItems: 'center', gap: '0.5rem', marginTop: '0.2rem' }}>
+                      {item.size ? <span>Size: {item.size}</span> : null}
+                      <div style={{ display: 'inline-flex', alignItems: 'center', border: '1px solid #D1C8BA', borderRadius: '4px', overflow: 'hidden' }}>
+                        <button
+                          type="button"
+                          onClick={() => updateQuantity(item.id, -1, item.size)}
+                          style={{ padding: '0 5px', fontSize: '11px', background: '#FFF8EC', border: 'none', cursor: 'pointer', fontWeight: 'bold' }}
+                          title="Decrease"
+                        >
+                          −
+                        </button>
+                        <span style={{ padding: '0 6px', fontSize: '11px', fontWeight: 'bold', minWidth: '16px', textAlign: 'center' }}>
+                          {item.quantity}
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => updateQuantity(item.id, 1, item.size)}
+                          style={{ padding: '0 5px', fontSize: '11px', background: '#FFF8EC', border: 'none', cursor: 'pointer', fontWeight: 'bold' }}
+                          title="Increase"
+                        >
+                          +
+                        </button>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => removeFromCart(item.id, item.size)}
+                        style={{ color: '#dc3545', background: 'none', border: 'none', cursor: 'pointer', fontSize: '0.75rem', textDecoration: 'underline', padding: '0 2px' }}
+                        title="Remove item from checkout"
+                      >
+                        Remove
+                      </button>
                     </div>
                   </div>
-                  <div style={{ fontWeight: 600, fontSize: '0.9rem', color: '#553E23' }}>
+                  <div style={{ fontWeight: 600, fontSize: '0.9rem', color: '#553E23', whiteSpace: 'nowrap' }}>
                     ₹{(item.price * item.quantity).toLocaleString('en-IN')}
                   </div>
                 </div>
