@@ -3,7 +3,9 @@
 **Production Target:** Al Umar Artisanal Perfumes Storefront & Atelier Management  
 **Status Date:** October 17, 2026  
 **Build Status:** `next build` exiting with Code 0 (Production Verified)  
-**Database:** PostgreSQL 18 on port 5433 (Healthy & Seeded)
+**Database:** Supabase Cloud PostgreSQL (Healthy, Seeded, & Live)  
+**Media Storage:** Supabase Cloud Storage (Public `products` bucket Live)  
+**Source Code:** GitHub Private Repository (`attaradil786-ops/al-umar-perfumes`)
 
 ---
 

@@ -1,7 +1,9 @@
 # Al Umar Perfumes — Project State & Progress Summary
 
-**Last Saved:** 2026-10-16  
-**Status:** All tasks fully implemented, tested, and validated with zero build errors (`next build` exiting with code 0).
+**Last Saved:** 2026-10-17  
+**Status:** All tasks fully implemented, tested, and validated with zero build errors (`next build` exiting with code 0).  
+**Repository:** Private GitHub repository at `https://github.com/attaradil786-ops/al-umar-perfumes.git`  
+**Backend & Database:** 100% hosted on Supabase Cloud (PostgreSQL + Media Storage)
 
 ---
 
@@ -10,17 +12,17 @@
 - **Next.js Dev Server**: Runs on port `3001` (`npm run dev -- -p 3001`) because port 3000 is occupied by another local service.
   - URL: `http://localhost:3001`
   - Base URL configured in `.env.local`: `NEXTAUTH_URL="http://localhost:3001"`
-- **PostgreSQL Database**:
-  - Native Windows PostgreSQL 18 instance running on port `5433`
-  - Data directory: `c:\Users\abdul\Desktop\al-umers\al-umar-next\.pgdata`
-  - Connection string: `postgresql://postgres:postgres@localhost:5433/alumar?schema=public`
-  - Start command:
-    ```powershell
-    & "C:\Program Files\PostgreSQL\18\bin\postgres.exe" -D "c:\Users\abdul\Desktop\al-umers\al-umar-next\.pgdata" -p 5433
-    ```
+- **Supabase Cloud Database (PostgreSQL)**:
+  - Project Reference: `pwfecwtmrnneivwnckxb` (AWS `ap-northeast-2`)
+  - Connection Pooler (IPv4 compatible): `aws-0-ap-northeast-2.pooler.supabase.com:6543/postgres?pgbouncer=true`
+  - Direct URL: `aws-0-ap-northeast-2.pooler.supabase.com:5432/postgres`
+  - All 27 products, admin user, 14 legal policies, and promotional coupons seeded and live.
+- **Supabase Cloud Storage**:
+  - Public Bucket: `products`
+  - Direct uploads from admin portal via `/api/admin/upload` with instant CDN public URL.
 - **Admin Portal**:
   - Route: `/studio-alumar-9f7x2k` (obfuscated base path)
-  - Admin login: `admin@alumarperfumes.com` (or `attaradil786@gmail.com`)
+  - Admin login: `admin@alumarperfumes.com`
   - Password: `Admin@AlUmar2026!`
   - TOTP 2FA: Supported and switchable in Settings
 
