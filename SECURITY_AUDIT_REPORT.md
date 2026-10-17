@@ -216,3 +216,28 @@ chmod +x scripts/security-test.sh
 ```powershell
 powershell -ExecutionPolicy Bypass -File scripts/security-test.ps1 -BaseUrl "http://localhost:3001"
 ```
+
+---
+
+## 6. Interactive Human Penetration Testing (Live Exploit Audit)
+
+A live simulated human attack was performed against the running application to discover edge cases, input validation anomalies, and client-side bypasses:
+
+### Exploits Discovered & Remediated:
+
+1. **Order Phone Suffix / Empty Suffix IDOR Bypass (CRITICAL)**
+   - **Vulnerability**: In `app/api/orders/[orderNumber]/route.ts` and `app/api/orders/track/route.ts`, phone numbers were verified using `orderPhoneDigits.endsWith(cleanPhoneDigits)`. When passing empty or non-digit characters (`phone=abc`), `cleanPhoneDigits` became `""`. Because `endsWith("")` evaluates to `true` in JavaScript, an attacker could access any order without knowing the customer's phone number. Furthermore, passing a single digit (e.g. `phone=0`) had a 10% chance of matching the phone suffix.
+   - **Fix**: Enforced that `cleanPhoneDigits` and `orderPhoneDigits` must each have at least 10 digits (`length >= 10`), and verified exact equality on the last 10 digits: `cleanPhoneDigits.slice(-10) === orderPhoneDigits.slice(-10)`. Requests with fewer than 10 digits are rejected with 400 Bad Request immediately.
+
+2. **Persistent Frontend DoS via LocalStorage Poisoning (HIGH)**
+   - **Vulnerability**: In `context/CartContext.tsx`, `localStorage.getItem('al_umar_cart')` was parsed without verifying its schema. If a user or malicious script set `al_umar_cart` to invalid JSON, non-array objects, or items missing numeric `price`/`quantity`, `cart.reduce()` crashed React with an unhandled exception. Because `localStorage` persists across reloads, the user's browser was permanently locked out of the store.
+   - **Fix**: Wrapped cart hydration in strict runtime schema checks, validating that `parsed` is an array of objects with valid string `id`, positive numeric `price`, and `quantity` in `[1, 100]`. Malformed items are discarded and corrupted localStorage entries are automatically cleared. Protected `subtotal` and `itemCount` calculations with safe array and numeric fallbacks.
+
+3. **Cart Validation Price Regex Deduction Manipulation (MEDIUM)**
+   - **Vulnerability**: In `app/api/cart/validate/route.ts`, client-supplied size options containing strings like `-₹2000` were parsed via regular expressions to reduce `unitPrice`, permitting arbitrary negative unit prices in frontend cart previews.
+   - **Fix**: Removed regex price deduction logic. Enforced trusted server-side size multiplier pricing strictly based on `prisma.product.price` and clamped with `Math.max(dbProduct.price, unitPrice)`.
+
+4. **Review Submission Spam & Unchecked Foreign Keys (MEDIUM)**
+   - **Vulnerability**: In `app/api/reviews/route.ts`, submitting a review for a non-existent `productId` triggered an unhandled Prisma foreign key error, returning a 500 server crash. Additionally, review text inputs lacked length limits and HTML tag sanitization.
+   - **Fix**: Added `CreateReviewSchema` validating `name` (2-60 chars), `comment` (5-1000 chars), and `rating` (1-5 integer). Added `prisma.product.findUnique` check before insertion, returning 404 for invalid products. Added HTML tag stripping to neutralize stored XSS and duplicate review flood protection (HTTP 429).
+

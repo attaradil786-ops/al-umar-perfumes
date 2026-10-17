@@ -50,15 +50,40 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
   const [isSearchOpen, setIsSearchOpen] = useState(false);
   const [quickViewProduct, setQuickViewProduct] = useState<any | null>(null);
 
-  // Load from localStorage on mount
+  // Load from localStorage on mount with strict schema validation
   useEffect(() => {
     try {
       const saved = localStorage.getItem('al_umar_cart');
       if (saved) {
-        setCart(JSON.parse(saved));
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed)) {
+          const sanitized: CartItem[] = parsed
+            .filter((item): item is CartItem => {
+              return Boolean(
+                item &&
+                typeof item === 'object' &&
+                typeof item.id === 'string' &&
+                typeof item.name === 'string' &&
+                typeof item.price === 'number' &&
+                !isNaN(item.price) &&
+                item.price >= 0 &&
+                typeof item.quantity === 'number' &&
+                !isNaN(item.quantity) &&
+                item.quantity > 0
+              );
+            })
+            .map(item => ({
+              ...item,
+              quantity: Math.min(100, Math.max(1, Math.floor(item.quantity))),
+              size: typeof item.size === 'string' ? item.size.slice(0, 50) : '6ml',
+            }));
+          setCart(sanitized);
+        } else {
+          localStorage.removeItem('al_umar_cart');
+        }
       }
     } catch {
-      // ignore
+      localStorage.removeItem('al_umar_cart');
     }
     setIsLoaded(true);
   }, []);
@@ -148,8 +173,14 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
     setCart([]);
   };
 
-  const subtotal = cart.reduce((acc, item) => acc + item.price * item.quantity, 0);
-  const itemCount = cart.reduce((acc, item) => acc + item.quantity, 0);
+  const subtotal = (Array.isArray(cart) ? cart : []).reduce(
+    (acc, item) => acc + (Number(item?.price) || 0) * (Number(item?.quantity) || 1),
+    0
+  );
+  const itemCount = (Array.isArray(cart) ? cart : []).reduce(
+    (acc, item) => acc + (Number(item?.quantity) || 0),
+    0
+  );
 
   return (
     <CartContext.Provider

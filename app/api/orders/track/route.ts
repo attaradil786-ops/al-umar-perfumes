@@ -43,11 +43,16 @@ export async function POST(req: NextRequest) {
     }
 
     // Verify phone matches
-    const orderPhoneDigits = order.phone.replace(/\D/g, '');
-    const phoneMatches =
-      orderPhoneDigits === cleanPhoneDigits ||
-      orderPhoneDigits.endsWith(cleanPhoneDigits) ||
-      cleanPhoneDigits.endsWith(orderPhoneDigits);
+    const orderPhoneDigits = (order.phone || '').replace(/\D/g, '');
+
+    if (cleanPhoneDigits.length < 10 || orderPhoneDigits.length < 10) {
+      return NextResponse.json(
+        { success: false, error: 'A valid 10-digit phone number is required to track this order.' },
+        { status: 400 }
+      );
+    }
+
+    const phoneMatches = cleanPhoneDigits.slice(-10) === orderPhoneDigits.slice(-10);
 
     if (!phoneMatches) {
       return NextResponse.json(

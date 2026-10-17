@@ -48,16 +48,13 @@ export async function POST(req: NextRequest) {
         quantity = dbProduct.stock;
       }
 
-      // Check price matching
+      // Server-side trusted price calculation strictly from DB
       let unitPrice = dbProduct.price;
-      const opt = item.size || item.option;
-      if (opt && opt.includes('+₹')) {
-        const match = opt.match(/\+₹(\d+)/);
-        if (match) unitPrice += parseInt(match[1], 10);
-      } else if (opt && opt.includes('-₹')) {
-        const match = opt.match(/-₹(\d+)/);
-        if (match) unitPrice -= parseInt(match[1], 10);
+      const opt = typeof (item.size || item.option) === 'string' ? (item.size || item.option).trim() : '6ml';
+      if (opt.toLowerCase().includes('12ml')) {
+        unitPrice = Math.round(dbProduct.price * 1.8);
       }
+      unitPrice = Math.max(dbProduct.price, unitPrice);
 
       validatedItems.push({
         id: dbProduct.id,

@@ -44,11 +44,17 @@ export async function GET(
     // Verify phone if customer lookup
     if (!admin) {
       const cleanInputDigits = (phone || '').replace(/\D/g, '');
-      const orderPhoneDigits = order.phone.replace(/\D/g, '');
-      const phoneMatches =
-        orderPhoneDigits === cleanInputDigits ||
-        orderPhoneDigits.endsWith(cleanInputDigits) ||
-        cleanInputDigits.endsWith(orderPhoneDigits);
+      const orderPhoneDigits = (order.phone || '').replace(/\D/g, '');
+
+      // Reject empty, short, or non-matching phone inputs to prevent suffix/empty bypass
+      if (cleanInputDigits.length < 10 || orderPhoneDigits.length < 10) {
+        return NextResponse.json(
+          { success: false, error: 'A valid 10-digit phone number is required to verify order details.' },
+          { status: 400 }
+        );
+      }
+
+      const phoneMatches = cleanInputDigits.slice(-10) === orderPhoneDigits.slice(-10);
 
       if (!phoneMatches) {
         return NextResponse.json(
