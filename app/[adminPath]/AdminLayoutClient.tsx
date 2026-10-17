@@ -22,6 +22,13 @@ export default function AdminLayoutClient({
   const router = useRouter();
   const isLoginPage = pathname.endsWith('/login') || pathname.endsWith('/login/');
 
+  React.useEffect(() => {
+    if (typeof window !== 'undefined') {
+      (window as any).__IS_ADMIN_PORTAL__ = true;
+      document.documentElement.dataset.admin = 'true';
+    }
+  }, []);
+
   if (isLoginPage) {
     return <>{children}</>;
   }

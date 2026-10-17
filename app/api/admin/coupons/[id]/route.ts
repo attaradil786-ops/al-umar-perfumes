@@ -29,9 +29,17 @@ export async function PATCH(
       else dataToUpdate.type = 'PERCENTAGE';
     }
     if (body.isActive !== undefined) dataToUpdate.isActive = Boolean(body.isActive);
-    if (body.value !== undefined) dataToUpdate.value = Number(body.value);
-    if (body.minOrder !== undefined) dataToUpdate.minOrder = Number(body.minOrder);
-    if (body.maxUses !== undefined) dataToUpdate.maxUses = body.maxUses ? Number(body.maxUses) : null;
+    if (body.value !== undefined) {
+      const v = Number(body.value);
+      if (isNaN(v) || v <= 0) {
+        return NextResponse.json({ error: 'Discount value must be greater than zero.' }, { status: 400 });
+      }
+      dataToUpdate.value = Math.round(v);
+    }
+    if (body.minOrder !== undefined) {
+      dataToUpdate.minOrder = Math.max(0, Math.round(Number(body.minOrder) || 0));
+    }
+    if (body.maxUses !== undefined) dataToUpdate.maxUses = body.maxUses ? Math.max(1, Math.round(Number(body.maxUses))) : null;
     if (body.expiresAt !== undefined) dataToUpdate.expiresAt = body.expiresAt ? new Date(body.expiresAt) : null;
 
     const updated = await prisma.coupon.update({

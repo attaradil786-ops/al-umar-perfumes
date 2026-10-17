@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import prisma from '@/lib/prisma';
 import { AddressFormSchema } from '@/lib/validators';
 import Razorpay from 'razorpay';
+import crypto from 'crypto';
 
 export async function POST(req: NextRequest) {
   try {
@@ -70,7 +71,15 @@ export async function POST(req: NextRequest) {
         );
       }
 
-      const qty = Math.max(1, parseInt(item.quantity, 10) || 1);
+      const rawQty = parseInt(item.quantity, 10);
+      if (isNaN(rawQty) || rawQty < 1 || rawQty > 100) {
+        return NextResponse.json(
+          { success: false, error: `Invalid quantity for "${dbProduct.name}". Allowed quantity is 1 to 100.` },
+          { status: 400 }
+        );
+      }
+      const qty = rawQty;
+
       if (dbProduct.stock < qty) {
         return NextResponse.json(
           {
@@ -81,15 +90,14 @@ export async function POST(req: NextRequest) {
         );
       }
 
+      // Base price strictly from DB
       let unitPrice = dbProduct.price;
-      const opt = item.size || item.option;
-      if (opt && opt.includes('+₹')) {
-        const match = opt.match(/\+₹(\d+)/);
-        if (match) unitPrice += parseInt(match[1], 10);
-      } else if (opt && opt.includes('-₹')) {
-        const match = opt.match(/-₹(\d+)/);
-        if (match) unitPrice -= parseInt(match[1], 10);
+      const opt = typeof item.size === 'string' ? item.size.trim() : '6ml';
+      if (opt.toLowerCase().includes('12ml')) {
+        unitPrice = Math.round(dbProduct.price * 1.8);
       }
+      // Never allow unitPrice to fall below base DB price
+      unitPrice = Math.max(dbProduct.price, unitPrice);
 
       calculatedSubtotal += unitPrice * qty;
       validatedOrderItems.push({
@@ -101,7 +109,7 @@ export async function POST(req: NextRequest) {
       });
     }
 
-    // Coupon calculation
+    // Coupon calculation (re-verified against DB)
     let discount = 0;
     let appliedCouponCode: string | null = null;
 
@@ -111,7 +119,7 @@ export async function POST(req: NextRequest) {
         where: { code: cleanCode },
       });
 
-      if (coupon && coupon.isActive) {
+      if (coupon && coupon.isActive && coupon.value > 0) {
         const notExpired = !coupon.expiresAt || new Date() <= coupon.expiresAt;
         const usesAvailable = !coupon.maxUses || coupon.usedCount < coupon.maxUses;
         const minOrderMet = calculatedSubtotal >= coupon.minOrder;
@@ -136,8 +144,17 @@ export async function POST(req: NextRequest) {
     const finalShipping = appliedCouponCode && couponCode?.toUpperCase().includes('FREE') ? 0 : initialShipping;
     const finalTotal = Math.max(0, calculatedSubtotal - discount + finalShipping);
 
-    // Create unique order number
-    const orderNumber = `ORD-${Date.now().toString().slice(-6)}-${Math.floor(1000 + Math.random() * 9000)}`;
+    // If client provided expected total, reject if it doesn't match server calculated total
+    if (body.clientTotal !== undefined && Math.abs(Number(body.clientTotal) - finalTotal) > 0) {
+      return NextResponse.json(
+        { success: false, error: 'Price or discount discrepancy detected. Please refresh your cart.' },
+        { status: 400 }
+      );
+    }
+
+    // Create cryptographically secure unpredictable order number
+    const randomNonce = crypto.randomBytes(3).toString('hex').toUpperCase();
+    const orderNumber = `ALU-${Date.now().toString(36).toUpperCase()}-${randomNonce}`;
 
     // Create Order with paymentStatus="pending", status="placed"
     const order = await prisma.order.create({

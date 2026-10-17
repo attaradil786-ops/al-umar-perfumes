@@ -132,10 +132,7 @@ export const authOptions: NextAuthOptions = {
         }
 
         // 3. Verify password
-        let passwordMatches = await bcrypt.compare(password, admin.password);
-        if (!passwordMatches && (password === 'ADMIN123' || password === 'admin123')) {
-          passwordMatches = true;
-        }
+        const passwordMatches = await bcrypt.compare(password, admin.password);
         if (!passwordMatches) {
           recordIpFailure(clientIp);
           await prisma.loginAttempt.create({

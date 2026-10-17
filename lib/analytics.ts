@@ -1,20 +1,26 @@
 'use client';
 
-// Helper to check whether current location or given path is within admin zone
+// Helper to check whether current location or given path is within admin zone without leaking secret path
 export function isAdminPath(path?: string): boolean {
   if (typeof window === 'undefined' && !path) return false;
+  if (typeof window !== 'undefined') {
+    if ((window as any).__IS_ADMIN_PORTAL__ || document.documentElement.dataset.admin === 'true') {
+      return true;
+    }
+  }
   const currentPath = path || (typeof window !== 'undefined' ? window.location.pathname : '');
-  const adminBase = process.env.NEXT_PUBLIC_ADMIN_BASE_PATH || '/studio-alumar-9f7x2k';
-  const cleanAdmin = adminBase.replace(/^\//, '').replace(/\/$/, '');
-
-  if (
-    currentPath.startsWith(`/${cleanAdmin}`) ||
-    currentPath.startsWith('/admin') ||
-    currentPath.startsWith('/api/admin')
-  ) {
+  if (currentPath.startsWith('/admin') || currentPath.startsWith('/api/admin')) {
     return true;
   }
-  return false;
+
+  // Known public storefront routes
+  const publicPrefixes = [
+    '/', '/product/', '/collections', '/best-sellers', '/new-arrivals',
+    '/bulk-order', '/checkout', '/order-success', '/order-confirmation',
+    '/about', '/contact', '/shipping-policy', '/return-policy', '/terms', '/track-order'
+  ];
+  const isPublic = currentPath === '/' || publicPrefixes.some(p => p !== '/' && currentPath.startsWith(p));
+  return !isPublic;
 }
 
 export interface AnalyticsItem {

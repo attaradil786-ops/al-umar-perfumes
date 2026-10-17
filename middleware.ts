@@ -8,6 +8,11 @@ export async function middleware(req: NextRequest) {
   const adminSegment = rawAdminPath.replace(/^\//, '').replace(/\/$/, '');
   const adminPrefix = `/${adminSegment}`;
 
+  // Block and return 404 for any generic admin discovery probes (/admin, /admin/login, /admin/products)
+  if (pathname === '/admin' || pathname.startsWith('/admin/')) {
+    return NextResponse.rewrite(new URL('/not-found', req.url), { status: 404 });
+  }
+
   // If path does not start with the secret admin path, skip admin handling
   if (!pathname.startsWith(adminPrefix)) {
     return NextResponse.next();

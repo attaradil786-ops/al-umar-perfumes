@@ -1,7 +1,10 @@
 import * as Sentry from '@sentry/nextjs';
 
-const adminBase = process.env.NEXT_PUBLIC_ADMIN_BASE_PATH || '/studio-alumar-9f7x2k';
-const cleanAdmin = adminBase.replace(/^\//, '').replace(/\/$/, '');
+const publicPrefixes = [
+  '/', '/product/', '/collections', '/best-sellers', '/new-arrivals',
+  '/bulk-order', '/checkout', '/order-success', '/order-confirmation',
+  '/about', '/contact', '/shipping-policy', '/return-policy', '/terms', '/track-order'
+];
 
 Sentry.init({
   dsn: process.env.NEXT_PUBLIC_SENTRY_DSN || 'https://samplePublicKey@o0.ingest.sentry.io/0',
@@ -15,15 +18,18 @@ Sentry.init({
     Sentry.replayIntegration({
       maskAllText: true,
       blockAllMedia: true,
-      // STRICT REQUIREMENT: Exclude all {ADMIN_BASE_PATH}* routes from session replay
+      // STRICT REQUIREMENT: Exclude all admin routes from session replay without leaking secret path in bundle
       beforeAddRecordingEvent: (event) => {
         if (typeof window !== 'undefined') {
+          if ((window as any).__IS_ADMIN_PORTAL__ || document.documentElement.dataset.admin === 'true') {
+            return null;
+          }
           const pathname = window.location.pathname;
-          if (
-            pathname.startsWith(`/${cleanAdmin}`) ||
-            pathname.startsWith('/admin') ||
-            pathname.startsWith('/api/admin')
-          ) {
+          if (pathname.startsWith('/admin') || pathname.startsWith('/api/admin')) {
+            return null;
+          }
+          const isPublic = pathname === '/' || publicPrefixes.some(p => p !== '/' && pathname.startsWith(p));
+          if (!isPublic) {
             // Drop recording completely on secret admin routes
             return null;
           }
@@ -37,11 +43,8 @@ Sentry.init({
   beforeSend(event) {
     if (typeof window !== 'undefined') {
       const pathname = window.location.pathname;
-      if (
-        pathname.startsWith(`/${cleanAdmin}`) ||
-        pathname.startsWith('/admin') ||
-        pathname.startsWith('/api/admin')
-      ) {
+      const isPublic = pathname === '/' || publicPrefixes.some(p => p !== '/' && pathname.startsWith(p));
+      if (!isPublic || pathname.startsWith('/admin') || pathname.startsWith('/api/admin')) {
         if (event.contexts?.replay) {
           delete event.contexts.replay;
         }

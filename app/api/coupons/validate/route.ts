@@ -17,7 +17,7 @@ export async function POST(req: Request) {
       where: { code: cleanCode },
     });
 
-    if (!coupon || !coupon.isActive) {
+    if (!coupon || !coupon.isActive || coupon.value <= 0) {
       return NextResponse.json(
         { valid: false, error: 'Invalid or inactive coupon code' },
         { status: 404 }
@@ -40,7 +40,13 @@ export async function POST(req: Request) {
       );
     }
 
-    const orderSubtotal = Number(subtotal) || 0;
+    const orderSubtotal = Number(subtotal);
+    if (isNaN(orderSubtotal) || orderSubtotal <= 0) {
+      return NextResponse.json(
+        { valid: false, error: 'Subtotal must be a positive number to apply a coupon.' },
+        { status: 400 }
+      );
+    }
 
     // Check minimum order requirement
     if (orderSubtotal < coupon.minOrder) {

@@ -13,9 +13,9 @@ export async function POST(req: NextRequest) {
       razorpaySignature,
     } = body;
 
-    if (!orderNumber || !razorpayPaymentId) {
+    if (!orderNumber || !razorpayPaymentId || !razorpayOrderId || !razorpaySignature) {
       return NextResponse.json(
-        { success: false, error: 'Missing payment verification credentials.' },
+        { success: false, error: 'Missing required Razorpay payment verification parameters.' },
         { status: 400 }
       );
     }
@@ -32,22 +32,42 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // Verify Razorpay HMAC signature
-    const secret = process.env.RAZORPAY_KEY_SECRET || 'placeholderSecretKey';
-    let isValid = false;
-
-    if (secret && !secret.includes('placeholderSecretKey') && razorpayOrderId && razorpaySignature) {
-      const text = `${razorpayOrderId}|${razorpayPaymentId}`;
-      const generatedSignature = crypto
-        .createHmac('sha256', secret)
-        .update(text)
-        .digest('hex');
-
-      isValid = generatedSignature === razorpaySignature;
-    } else {
-      // In local testing / mock simulation mode without live credentials, accept test credentials
-      isValid = Boolean(razorpayPaymentId);
+    // Idempotency check: If already marked as paid, return success without duplicate stock decrements
+    if (order.paymentStatus === 'paid') {
+      return NextResponse.json({
+        success: true,
+        orderNumber: order.orderNumber,
+        message: 'Order already verified.',
+      });
     }
+
+    // Strict Razorpay HMAC-SHA256 signature verification
+    const secret = process.env.RAZORPAY_KEY_SECRET;
+    if (!secret || secret.includes('placeholderSecretKey')) {
+      // In production, reject immediately if secret is not properly configured
+      if (process.env.NODE_ENV === 'production') {
+        console.error('RAZORPAY_KEY_SECRET is not configured in production.');
+        return NextResponse.json(
+          { success: false, error: 'Payment gateway configuration error.' },
+          { status: 500 }
+        );
+      }
+    }
+
+    const verificationSecret = secret || 'placeholderSecretKey';
+    const text = `${razorpayOrderId}|${razorpayPaymentId}`;
+    const generatedSignature = crypto
+      .createHmac('sha256', verificationSecret)
+      .update(text)
+      .digest('hex');
+
+    // Use timingSafeEqual to prevent side-channel timing attacks
+    const generatedBuf = Buffer.from(generatedSignature, 'utf8');
+    const providedBuf = Buffer.from(razorpaySignature, 'utf8');
+
+    const isValid =
+      generatedBuf.length === providedBuf.length &&
+      crypto.timingSafeEqual(generatedBuf, providedBuf);
 
     if (!isValid) {
       return NextResponse.json(
@@ -56,43 +76,56 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // Update Order: paymentStatus="paid", paymentId
-    await prisma.order.update({
-      where: { id: order.id },
-      data: {
-        paymentStatus: 'paid',
-        paymentId: razorpayPaymentId,
-        status: 'placed',
-      },
+    // Execute atomic transaction for order update, stock decrement, and coupon usage
+    await prisma.$transaction(async (tx) => {
+      // Re-fetch inside transaction to lock and prevent race conditions
+      const currentOrder = await tx.order.findUnique({
+        where: { id: order.id },
+        include: { items: true },
+      });
+
+      if (!currentOrder || currentOrder.paymentStatus === 'paid') {
+        return;
+      }
+
+      // 1. Mark order as paid
+      await tx.order.update({
+        where: { id: currentOrder.id },
+        data: {
+          paymentStatus: 'paid',
+          paymentId: razorpayPaymentId,
+          status: 'placed',
+        },
+      });
+
+      // 2. Decrement stock atomically
+      for (const item of currentOrder.items) {
+        const product = await tx.product.findUnique({
+          where: { id: item.productId },
+          select: { stock: true },
+        });
+
+        if (product) {
+          const newStock = Math.max(0, product.stock - item.quantity);
+          await tx.product.update({
+            where: { id: item.productId },
+            data: { stock: newStock },
+          });
+        }
+      }
+
+      // 3. Atomically increment coupon usedCount if coupon was used
+      if (currentOrder.couponCode) {
+        await tx.coupon.updateMany({
+          where: {
+            code: currentOrder.couponCode,
+          },
+          data: {
+            usedCount: { increment: 1 },
+          },
+        });
+      }
     });
-
-    // Decrement stock for each item in the order
-    for (const item of order.items) {
-      await prisma.product.update({
-        where: { id: item.productId },
-        data: {
-          stock: {
-            decrement: item.quantity,
-          },
-        },
-      }).catch(err => {
-        console.error(`Failed to decrement stock for product ${item.productId}:`, err);
-      });
-    }
-
-    // If coupon used, increment coupon's usedCount
-    if (order.couponCode) {
-      await prisma.coupon.update({
-        where: { code: order.couponCode },
-        data: {
-          usedCount: {
-            increment: 1,
-          },
-        },
-      }).catch(err => {
-        console.error(`Failed to update coupon usage for ${order.couponCode}:`, err);
-      });
-    }
 
     // Send confirmation email via Resend if email is provided
     if (order.email && process.env.RESEND_API_KEY && !process.env.RESEND_API_KEY.includes('placeholder')) {

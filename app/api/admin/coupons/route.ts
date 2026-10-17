@@ -57,12 +57,20 @@ export async function POST(request: NextRequest) {
       normalizedType = 'PERCENTAGE';
     }
 
+    const numValue = Number(value);
+    if (isNaN(numValue) || numValue <= 0) {
+      return NextResponse.json({ error: 'Discount value must be greater than zero.' }, { status: 400 });
+    }
+    if (normalizedType === 'PERCENTAGE' && numValue > 100) {
+      return NextResponse.json({ error: 'Percentage discount cannot exceed 100%.' }, { status: 400 });
+    }
+
     const coupon = await prisma.coupon.create({
       data: {
         code: cleanCode,
         type: normalizedType,
-        value: Number(value) || 0,
-        minOrder: minOrder ? Math.max(0, Number(minOrder)) : 0,
+        value: Math.round(numValue),
+        minOrder: minOrder ? Math.max(0, Math.round(Number(minOrder))) : 0,
         maxUses: maxUses ? Math.max(1, Number(maxUses)) : null,
         expiresAt: expiresAt ? new Date(expiresAt) : null,
         isActive: isActive !== undefined ? Boolean(isActive) : true,

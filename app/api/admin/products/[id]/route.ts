@@ -50,9 +50,24 @@ export async function PATCH(
     if (body.slug !== undefined) dataToUpdate.slug = body.slug.trim().toLowerCase();
     if (body.description !== undefined) dataToUpdate.description = body.description.trim();
     if (body.category !== undefined) dataToUpdate.category = body.category.toLowerCase().trim();
-    if (body.price !== undefined) dataToUpdate.price = Number(body.price);
-    if (body.mrp !== undefined) dataToUpdate.mrp = Number(body.mrp);
-    if (body.stock !== undefined) dataToUpdate.stock = Number(body.stock);
+    if (body.price !== undefined) {
+      const p = Number(body.price);
+      if (isNaN(p) || p < 1) {
+        return NextResponse.json({ error: 'Product price must be at least ₹1.' }, { status: 400 });
+      }
+      dataToUpdate.price = Math.round(p);
+    }
+    if (body.mrp !== undefined) {
+      const m = Number(body.mrp);
+      dataToUpdate.mrp = isNaN(m) ? null : Math.round(m);
+    }
+    if (body.stock !== undefined) {
+      const s = Number(body.stock);
+      if (isNaN(s) || s < 0) {
+        return NextResponse.json({ error: 'Product stock cannot be negative.' }, { status: 400 });
+      }
+      dataToUpdate.stock = Math.round(s);
+    }
     if (body.images !== undefined) dataToUpdate.images = body.images;
     if (body.isActive !== undefined) dataToUpdate.isActive = Boolean(body.isActive);
     if (body.isBestSeller !== undefined) dataToUpdate.isBestSeller = Boolean(body.isBestSeller);
@@ -83,6 +98,27 @@ export async function DELETE(
     }
 
     const { id } = params;
+
+    // Check if product is referenced in historical customer orders
+    const orderItemCount = await prisma.orderItem.count({
+      where: { productId: id },
+    });
+
+    if (orderItemCount > 0) {
+      // Soft-delete to preserve legal invoices and tax records
+      await prisma.product.update({
+        where: { id },
+        data: { isActive: false },
+      });
+
+      return NextResponse.json({
+        success: true,
+        message: 'Product is linked to historical customer orders. Deactivated (soft-deleted) to preserve order history.',
+        softDeleted: true,
+      });
+    }
+
+    // Hard-delete if no orders reference it
     await prisma.product.delete({
       where: { id },
     });

@@ -1,11 +1,12 @@
 import { NextResponse } from 'next/server';
 import prisma from '@/lib/prisma';
+import crypto from 'crypto';
 
 interface OrderItemInput {
   productId?: string;
   id?: string;
-  name: string;
-  price: number;
+  name?: string;
+  price?: number;
   quantity: number;
   size?: string | null;
 }
@@ -25,58 +26,140 @@ export async function POST(req: Request) {
       couponCode,
       paymentMethod,
     } = body as {
-      customerName: string;
-      phone: string;
+      customerName?: string;
+      phone?: string;
       email?: string;
-      address: string;
-      city: string;
-      state: string;
-      pincode: string;
-      items: OrderItemInput[];
+      address?: string;
+      city?: string;
+      state?: string;
+      pincode?: string;
+      items?: OrderItemInput[];
       couponCode?: string;
       paymentMethod?: string;
     };
 
-    if (!customerName || !phone || !address || !city || !state || !pincode || !items || !items.length) {
-      return NextResponse.json({ error: 'Please fill in all required shipping details' }, { status: 400 });
+    if (!customerName || !phone || !address || !city || !state || !pincode || !items || !Array.isArray(items) || items.length === 0) {
+      return NextResponse.json({ error: 'Please fill in all required shipping and order details.' }, { status: 400 });
     }
 
-    // Calculate subtotal from items
-    let subtotal = 0;
+    // Server-side product price & stock verification
+    const productIds = items.map(i => i.productId || i.id).filter(Boolean) as string[];
+    const dbProducts = await prisma.product.findMany({
+      where: {
+        id: { in: productIds },
+        isActive: true,
+      },
+    });
+
+    const productMap = new Map(dbProducts.map(p => [p.id, p]));
+
+    let calculatedSubtotal = 0;
+    const validatedItems: Array<{
+      productId: string;
+      name: string;
+      price: number;
+      quantity: number;
+      size: string | null;
+    }> = [];
+
     for (const item of items) {
-      subtotal += (Number(item.price) || 0) * (Number(item.quantity) || 1);
+      const pid = item.productId || item.id;
+      if (!pid) {
+        return NextResponse.json({ error: 'Product ID is required for each cart item.' }, { status: 400 });
+      }
+
+      const dbProduct = productMap.get(pid);
+      if (!dbProduct) {
+        return NextResponse.json(
+          { error: `Product is no longer active or available.` },
+          { status: 400 }
+        );
+      }
+
+      // Enforce quantity constraints: 1 to 100
+      const rawQty = parseInt(String(item.quantity), 10);
+      if (isNaN(rawQty) || rawQty < 1 || rawQty > 100) {
+        return NextResponse.json(
+          { error: `Invalid quantity for "${dbProduct.name}". Allowed quantity is 1 to 100.` },
+          { status: 400 }
+        );
+      }
+
+      if (dbProduct.stock < rawQty) {
+        return NextResponse.json(
+          { error: `Only ${dbProduct.stock} units of "${dbProduct.name}" available in stock.` },
+          { status: 400 }
+        );
+      }
+
+      // Always derive price from DB - NEVER trust client price
+      let unitPrice = dbProduct.price;
+      const opt = typeof item.size === 'string' ? item.size.trim() : null;
+      if (opt && opt.toLowerCase().includes('12ml')) {
+        unitPrice = Math.round(dbProduct.price * 1.8);
+      }
+      unitPrice = Math.max(dbProduct.price, unitPrice);
+
+      calculatedSubtotal += unitPrice * rawQty;
+      validatedItems.push({
+        productId: dbProduct.id,
+        name: dbProduct.name,
+        price: unitPrice,
+        quantity: rawQty,
+        size: opt,
+      });
     }
 
-    // Coupon calculation
+    // Re-verify coupon strictly server-side
     let discount = 0;
     let validCouponId: string | null = null;
-    if (couponCode) {
+    let appliedCouponCode: string | null = null;
+
+    if (couponCode && typeof couponCode === 'string' && couponCode.trim()) {
+      const cleanCode = couponCode.toUpperCase().trim();
       const coupon = await prisma.coupon.findUnique({
-        where: { code: couponCode.toUpperCase().trim() },
+        where: { code: cleanCode },
       });
-      if (coupon && coupon.isActive && (!coupon.expiresAt || new Date() <= coupon.expiresAt)) {
-        if (subtotal >= coupon.minOrder) {
+
+      if (coupon && coupon.isActive && coupon.value > 0) {
+        const notExpired = !coupon.expiresAt || new Date() <= coupon.expiresAt;
+        const usesAvailable = !coupon.maxUses || coupon.usedCount < coupon.maxUses;
+        const minOrderMet = calculatedSubtotal >= coupon.minOrder;
+
+        if (notExpired && usesAvailable && minOrderMet) {
           validCouponId = coupon.id;
+          appliedCouponCode = coupon.code;
           const typeUpper = (coupon.type || '').toUpperCase();
           if (typeUpper === 'PERCENTAGE' || typeUpper === 'PERCENT') {
             const pct = Math.min(100, Math.max(0, coupon.value));
-            discount = Math.min(subtotal, Math.round((subtotal * pct) / 100));
+            discount = Math.min(calculatedSubtotal, Math.round((calculatedSubtotal * pct) / 100));
           } else if (typeUpper === 'FREE_SHIPPING' || typeUpper === 'FREESHIPPING') {
-            discount = subtotal >= 1500 ? 0 : 100;
+            discount = calculatedSubtotal >= 1500 ? 0 : 100;
           } else {
-            discount = Math.min(coupon.value, subtotal);
+            discount = Math.min(coupon.value, calculatedSubtotal);
           }
         }
       }
     }
 
     // Free shipping threshold ₹1500
-    const shipping = subtotal >= 1500 ? 0 : 100;
-    const total = Math.max(0, subtotal - discount + shipping);
+    const initialShipping = calculatedSubtotal >= 1500 ? 0 : 100;
+    const finalShipping = appliedCouponCode && appliedCouponCode.includes('FREE') ? 0 : initialShipping;
+    const finalTotal = Math.max(0, calculatedSubtotal - discount + finalShipping);
 
-    const orderNumber = `ALU-${Date.now().toString().slice(-6)}-${Math.floor(100 + Math.random() * 900)}`;
+    // Cryptographically random order number
+    const randomNonce = crypto.randomBytes(3).toString('hex').toUpperCase();
+    const orderNumber = `ALU-${Date.now().toString(36).toUpperCase()}-${randomNonce}`;
 
     const order = await prisma.$transaction(async (tx) => {
+      // Re-verify stock inside transaction
+      for (const it of validatedItems) {
+        const p = await tx.product.findUnique({ where: { id: it.productId }, select: { stock: true } });
+        if (!p || p.stock < it.quantity) {
+          throw new Error(`Insufficient stock for product ID ${it.productId}`);
+        }
+      }
+
       // Create Order
       const newOrder = await tx.order.create({
         data: {
@@ -88,27 +171,27 @@ export async function POST(req: Request) {
           city: city.trim(),
           state: state.trim(),
           pincode: pincode.trim(),
-          subtotal,
+          subtotal: calculatedSubtotal,
           discount,
-          shipping,
-          total,
-          couponCode: (validCouponId && couponCode) ? couponCode.toUpperCase().trim() : null,
+          shipping: finalShipping,
+          total: finalTotal,
+          couponCode: appliedCouponCode,
           paymentStatus: paymentMethod === 'COD' ? 'PENDING_COD' : 'PENDING_ONLINE',
-          status: 'PENDING',
+          status: 'placed',
           items: {
-            create: items.map((it: OrderItemInput) => ({
-              productId: it.productId || it.id || '',
+            create: validatedItems.map(it => ({
+              productId: it.productId,
               name: it.name,
-              price: Number(it.price),
-              quantity: Number(it.quantity),
-              size: it.size || null,
+              price: it.price,
+              quantity: it.quantity,
+              size: it.size,
             })),
           },
         },
         include: { items: true },
       });
 
-      // Update coupon usage
+      // Update coupon usage atomically
       if (validCouponId) {
         await tx.coupon.update({
           where: { id: validCouponId },
@@ -116,16 +199,12 @@ export async function POST(req: Request) {
         });
       }
 
-      // Decrement stock
-      for (const item of items) {
-        if (item.productId || item.id) {
-          await tx.product.update({
-            where: { id: item.productId || item.id },
-            data: { stock: { decrement: Number(item.quantity) || 1 } },
-          }).catch(() => {
-            // ignore if product missing
-          });
-        }
+      // Decrement stock atomically
+      for (const item of validatedItems) {
+        await tx.product.update({
+          where: { id: item.productId },
+          data: { stock: { decrement: item.quantity } },
+        });
       }
 
       return newOrder;
@@ -139,6 +218,6 @@ export async function POST(req: Request) {
     });
   } catch (error) {
     console.error('Order creation error:', error);
-    return NextResponse.json({ error: 'Failed to create order' }, { status: 500 });
+    return NextResponse.json({ error: 'Failed to create order. Please check item availability.' }, { status: 500 });
   }
 }
