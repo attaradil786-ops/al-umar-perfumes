@@ -48,20 +48,23 @@ function clearIpFailures(ip: string): void {
   ipRateLimits.delete(ip);
 }
 
+const isHttps = process.env.NEXTAUTH_URL?.startsWith('https://') ?? false;
+
 export const authOptions: NextAuthOptions = {
   session: {
     strategy: 'jwt',
     maxAge: 30 * 60, // 30 minutes
     updateAge: 5 * 60, // 5 minutes sliding update
   },
+  useSecureCookies: isHttps,
   cookies: {
     sessionToken: {
-      name: process.env.NODE_ENV === 'production' ? '__Secure-next-auth.session-token' : 'next-auth.session-token',
+      name: isHttps ? '__Secure-next-auth.session-token' : 'next-auth.session-token',
       options: {
         httpOnly: true,
-        sameSite: 'strict',
+        sameSite: 'lax',
         path: '/',
-        secure: process.env.NODE_ENV === 'production',
+        secure: isHttps,
       },
     },
   },

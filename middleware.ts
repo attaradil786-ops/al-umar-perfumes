@@ -8,12 +8,16 @@ export async function middleware(req: NextRequest) {
   const adminSegment = rawAdminPath.replace(/^\//, '').replace(/\/$/, '');
   const adminPrefix = `/${adminSegment}`;
 
-  // Block and return 404 for any generic admin discovery probes (/admin, /admin/login, /admin/products)
-  if (pathname === '/admin' || pathname.startsWith('/admin/')) {
-    return NextResponse.rewrite(new URL('/not-found', req.url), { status: 404 });
+  // Route /admin and /admin/* directly to the configured admin portal
+  if (pathname === '/admin' || pathname === '/admin/') {
+    return NextResponse.redirect(new URL(adminPrefix, req.url));
+  }
+  if (pathname.startsWith('/admin/')) {
+    const sub = pathname.replace(/^\/admin/, '');
+    return NextResponse.redirect(new URL(`${adminPrefix}${sub}`, req.url));
   }
 
-  // If path does not start with the secret admin path, skip admin handling
+  // If path does not start with the admin path, skip admin handling
   if (!pathname.startsWith(adminPrefix)) {
     return NextResponse.next();
   }
@@ -25,6 +29,16 @@ export async function middleware(req: NextRequest) {
   const rawIp = fwdIp || realIp || req.ip || '127.0.0.1';
   const clientIp = rawIp.replace('::ffff:', '');
   const userAgent = req.headers.get('user-agent') || 'Unknown';
+
+  const isLocalRequest =
+    clientIp === '127.0.0.1' ||
+    clientIp === '::1' ||
+    clientIp === 'localhost' ||
+    clientIp.startsWith('192.168.') ||
+    clientIp.startsWith('10.') ||
+    clientIp.startsWith('172.') ||
+    req.nextUrl.hostname === 'localhost' ||
+    req.nextUrl.hostname === '127.0.0.1';
 
   const sendAuditLog = (success: boolean) => {
     try {
@@ -46,11 +60,11 @@ export async function middleware(req: NextRequest) {
     }
   };
 
-  // STEP 3: IP allowlist check (if non-empty)
+  // IP allowlist check (if non-empty and not local development)
   const allowedIpsStr = process.env.ADMIN_ALLOWED_IPS?.trim();
-  if (allowedIpsStr) {
+  if (allowedIpsStr && !isLocalRequest) {
     const allowedIps = allowedIpsStr.split(',').map(s => s.trim().replace('::ffff:', ''));
-    const isAllowed = allowedIps.includes(clientIp) || 
+    const isAllowed = allowedIps.includes(clientIp) ||
       (clientIp === '::1' && allowedIps.includes('127.0.0.1')) ||
       (clientIp === '127.0.0.1' && allowedIps.includes('::1'));
 
@@ -60,23 +74,27 @@ export async function middleware(req: NextRequest) {
     }
   }
 
-  // STEP 2: Login page access
+  // Login page access: allow unauthenticated requests
   const isLoginPage = pathname === `${adminPrefix}/login` || pathname === `${adminPrefix}/login/`;
   if (isLoginPage) {
     return NextResponse.next();
   }
 
-  // STEP 2: Authenticated session check
+  // Authenticated session check
+  const hasSecureCookie = req.cookies.has('__Secure-next-auth.session-token');
   const token = await getToken({
     req,
     secret: process.env.NEXTAUTH_SECRET,
-    secureCookie: req.cookies.has('__Secure-next-auth.session-token'),
+    secureCookie: hasSecureCookie,
   });
 
   if (!token || !token.email) {
-    // Unauthenticated requests MUST return 404, NEVER redirect or 401
     sendAuditLog(false);
-    return NextResponse.rewrite(new URL('/not-found', req.url), { status: 404 });
+    const loginUrl = new URL(`${adminPrefix}/login`, req.url);
+    if (pathname !== adminPrefix && pathname !== `${adminPrefix}/`) {
+      loginUrl.searchParams.set('callbackUrl', pathname);
+    }
+    return NextResponse.redirect(loginUrl);
   }
 
   sendAuditLog(true);

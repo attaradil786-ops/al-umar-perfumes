@@ -36,8 +36,10 @@ export default function AdminLoginPage({
         return;
       }
 
-      // Successful login -> Navigate to admin root dashboard
-      router.push(`/${params.adminPath}`);
+      // Successful login -> Navigate to callbackUrl or admin root dashboard
+      const searchParams = new URLSearchParams(window.location.search);
+      const callbackUrl = searchParams.get('callbackUrl') || `/${params.adminPath}`;
+      router.push(callbackUrl);
       router.refresh();
     } catch {
       setErrorMessage('Invalid credentials. Please verify and try again.');
