@@ -112,17 +112,50 @@ npx tsx scratch/test-coupons-offers-content-reviews.ts
 
 ---
 
-## 4. How to Resume Work
+### Milestone C: Product Custom Dimensions & Variant Options
+1. **Database Schema (`prisma/schema.prisma`)**:
+   - Added `unitType` (`ml`, `cm`, `g`, `size`) and `variants` (`Json?`) to Prisma `Product` model.
+   - Pushed to Supabase cloud database with `prisma db push` and generated fresh Prisma client.
+2. **Admin Portal UI (`[adminPath]/products/new` & `[adminPath]/products/[id]`)**:
+   - Interactive Dimension / Unit selector (`ml`, `cm`, `g`, standard `size`).
+   - One-click presets:
+     - *Perfume ml Preset* (6ml, 12ml, 25ml, 50ml, 100ml)
+     - *Holy Quran cm Preset* (Pocket 8x11cm, Standard 14x20cm, Large 17x24cm, Deluxe 20x28cm)
+     - *Weight g Preset* (50g, 100g, 250g, 500g, 1000g)
+   - Variant manager table with custom label, per-variant price (₹), MRP (₹), and in-stock count.
+   - Automatic total stock tallying across active variants.
+3. **Storefront & Modal Product Display**:
+   - Product detail page (`/product/[slug]`) & Quick View modals render interactive variant selector buttons.
+   - Live price, MRP strike, and stock state update on variant switch with "SOLD OUT" badge for out-of-stock sizes.
+4. **Cart, Checkout & Orders Integration**:
+   - Cart stores selected variant size/dimension with item metadata.
+   - Background validation and order creation securely records selected variant with price integrity.
 
-1. If computer restarted, ensure PostgreSQL is running:
-   ```powershell
-   & "C:\Program Files\PostgreSQL\18\bin\postgres.exe" -D "c:\Users\abdul\Desktop\al-umers\al-umar-next\.pgdata" -p 5433
-   ```
-2. Start the Next.js development server:
-   ```bash
-   cd c:\Users\abdul\Desktop\al-umers\al-umar-next
-   npm run dev -- -p 3001
-   ```
-3. Open browser:
-   - Storefront: `http://localhost:3001`
-   - Admin Portal: `http://localhost:3001/studio-alumar-9f7x2k`
+---
+
+### Milestone D: Admin Gateway & Session Persistence Fix
+1. **Direct `/admin` Access**:
+   - Browsing to `http://localhost:3001/admin` seamlessly redirects unauthenticated visitors to `/studio-alumar-9f7x2k/login` and authenticated admins directly to the dashboard.
+2. **Local HTTP Cookie Fix (`lib/auth.ts`)**:
+   - NextAuth session token cookies dynamically use `isHttps` check (`sameSite: 'lax'`, non-secure over local HTTP on port 3001, `__Secure-` prefix and `secure: true` in production HTTPS).
+3. **Admin Credentials & Security**:
+   - Master login verified in Supabase PostgreSQL database:
+     - **Email:** `admin@alumarperfumes.com`
+     - **Password:** `Admin@AlUmar2026!`
+   - Local IP allowlist check relaxed for localhost/LAN testing so local developers are never blocked.
+
+---
+
+## 4. Current Status & How to Run
+
+1. **Running Production Server**:
+   - Running live on port 3001:
+     ```bash
+     cd c:\Users\abdul\Desktop\al-umers\al-umar-next
+     npm run start -- -p 3001
+     ```
+2. **URLs**:
+   - **Storefront:** [http://localhost:3001](http://localhost:3001)
+   - **Admin Portal:** [http://localhost:3001/admin](http://localhost:3001/admin) (or `http://localhost:3001/studio-alumar-9f7x2k`)
+   - **Admin Credentials:** `admin@alumarperfumes.com` / `Admin@AlUmar2026!`
+
