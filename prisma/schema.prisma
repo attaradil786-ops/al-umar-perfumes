@@ -1,0 +1,129 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+model Product {
+  id           String      @id @default(cuid())
+  slug         String      @unique
+  name         String
+  description  String
+  category     String
+  price        Int
+  mrp          Int?
+  stock        Int         @default(0)
+  images       String[]
+  rating       Float       @default(5.0)
+  reviewsCount Int         @default(0)
+  isActive     Boolean     @default(true)
+  isBestSeller Boolean     @default(false)
+  isNewArrival Boolean     @default(false)
+  taxRate      Int         @default(18)
+  hsnCode      String      @default("3303")
+  createdAt    DateTime    @default(now())
+  updatedAt    DateTime    @updatedAt
+  reviews      Review[]
+}
+
+model Order {
+  id            String      @id @default(cuid())
+  orderNumber   String      @unique
+  customerName  String
+  phone         String
+  email         String?
+  address       String
+  city          String
+  state         String
+  pincode       String
+  items         OrderItem[]
+  subtotal      Int
+  discount      Int         @default(0)
+  shipping      Int         @default(0)
+  total         Int
+  couponCode    String?
+  paymentStatus String      @default("PENDING")
+  paymentId     String?
+  status        String      @default("PENDING")
+  trackingUrl   String?
+  awbNumber     String?
+  shipmentId    String?
+  createdAt     DateTime    @default(now())
+}
+
+model OrderItem {
+  id        String   @id @default(cuid())
+  orderId   String
+  order     Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  productId String
+  name      String
+  price     Int
+  quantity  Int
+  size      String?
+}
+
+model Coupon {
+  id        String    @id @default(cuid())
+  code      String    @unique
+  type      String    @default("PERCENTAGE") // PERCENTAGE or FLAT
+  value     Int
+  minOrder  Int       @default(0)
+  maxUses   Int?
+  usedCount Int       @default(0)
+  expiresAt DateTime?
+  isActive  Boolean   @default(true)
+}
+
+model SiteContent {
+  id    String @id @default(cuid())
+  key   String @unique
+  value String
+}
+
+model Admin {
+  id          String    @id @default(cuid())
+  email       String    @unique
+  password    String
+  totpSecret  String?
+  totpEnabled Boolean   @default(false)
+  lastLoginAt DateTime?
+  lastLoginIp String?
+  createdAt   DateTime  @default(now())
+}
+
+model LoginAttempt {
+  id        String   @id @default(cuid())
+  email     String
+  ip        String
+  userAgent String?
+  success   Boolean
+  createdAt DateTime @default(now())
+}
+
+model Review {
+  id         String   @id @default(cuid())
+  productId  String
+  product    Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+  name       String
+  rating     Float
+  comment    String
+  isApproved Boolean  @default(false)
+  createdAt  DateTime @default(now())
+}
+
+model Offer {
+  id          String    @id @default(cuid())
+  title       String
+  description String
+  code        String?
+  bannerImage String?
+  placement   String    @default("top_bar") // top_bar, hero, popup
+  startsAt    DateTime  @default(now())
+  endsAt      DateTime?
+  isActive    Boolean   @default(true)
+  position    Int       @default(0)
+}

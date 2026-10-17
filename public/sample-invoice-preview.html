@@ -1,0 +1,197 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Tax Invoice #ALU-2026-INV8821 - Al Umar Perfumes</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { background-color: #f4f0ea; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; padding: 40px 20px; color: #121212; display: flex; justify-content: center; }
+    .invoice-card { background: #ffffff; width: 850px; max-width: 100%; padding: 45px; border-radius: 8px; box-shadow: 0 10px 30px rgba(0,0,0,0.08); border: 1px solid #e2d7c5; }
+    .header-row { display: flex; justify-content: space-between; align-items: flex-start; border-bottom: 2px solid #553E23; padding-bottom: 20px; margin-bottom: 24px; }
+    .brand-title { font-size: 24px; font-weight: 800; color: #553E23; letter-spacing: 2px; text-transform: uppercase; }
+    .brand-sub { font-size: 11px; color: #7A5B37; margin-top: 4px; letter-spacing: 1px; font-weight: 600; }
+    .company-meta { font-size: 11px; color: #553E23; margin-top: 10px; line-height: 1.5; }
+    .invoice-title-block { text-align: right; }
+    .invoice-title { font-size: 22px; font-weight: 800; color: #1E6B5C; letter-spacing: 1.5px; }
+    .invoice-num { font-size: 14px; font-weight: 700; color: #553E23; margin-top: 4px; }
+    .invoice-meta { font-size: 11px; color: #7A5B37; margin-top: 3px; }
+    .badge { display: inline-block; background: #e6f4ea; color: #1E6B5C; font-size: 10px; font-weight: 700; padding: 3px 8px; border-radius: 4px; text-transform: uppercase; margin-top: 4px; }
+    
+    .addresses-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; background: #FFFDF9; border: 1px solid #E8DCC8; border-radius: 6px; padding: 18px; margin-bottom: 24px; }
+    .address-col h4 { font-size: 11px; text-transform: uppercase; color: #553E23; font-weight: 700; letter-spacing: 0.5px; margin-bottom: 6px; }
+    .address-col p { font-size: 11.5px; line-height: 1.5; color: #333333; }
+    
+    table { width: 100%; border-collapse: collapse; margin-bottom: 24px; font-size: 11.5px; }
+    th { background: #553E23; color: #FFFFFF; font-weight: 700; text-transform: uppercase; font-size: 10px; letter-spacing: 0.5px; padding: 10px 8px; text-align: left; }
+    td { padding: 12px 8px; border-bottom: 1px solid #E8DCC8; }
+    tr:nth-child(even) td { background-color: #FFFDF9; }
+    .text-center { text-align: center; }
+    .text-right { text-align: right; }
+    .item-name { font-weight: 700; color: #121212; }
+    .item-size { font-size: 10px; color: #7A5B37; margin-top: 2px; }
+    
+    .totals-container { display: grid; grid-template-columns: 1.2fr 1fr; gap: 24px; margin-top: 10px; align-items: start; }
+    .tax-box { background: #FFFDF9; border: 1px solid #E8DCC8; border-radius: 6px; padding: 16px; font-size: 11.5px; }
+    .tax-box h4 { font-size: 11px; font-weight: 700; color: #553E23; text-transform: uppercase; margin-bottom: 10px; border-bottom: 1px solid #E8DCC8; padding-bottom: 6px; }
+    .tax-row { display: flex; justify-content: space-between; margin-bottom: 6px; color: #553E23; }
+    .tax-row.bold { font-weight: 700; border-top: 1px solid #E8DCC8; padding-top: 6px; margin-top: 6px; }
+    
+    .summary-box { font-size: 12px; }
+    .summary-row { display: flex; justify-content: space-between; padding: 5px 0; color: #553E23; }
+    .summary-row.discount { color: #1E6B5C; font-weight: 600; }
+    .summary-row.total { border-top: 2px solid #553E23; padding-top: 10px; margin-top: 6px; font-size: 16px; font-weight: 800; color: #1E6B5C; }
+    
+    .words-box { margin-top: 20px; padding: 12px 16px; background: #F8F5F0; border-radius: 6px; border-left: 3px solid #1E6B5C; font-size: 11.5px; }
+    .words-label { font-weight: 700; color: #553E23; text-transform: uppercase; font-size: 10px; margin-bottom: 2px; }
+    .words-val { font-weight: 700; color: #1E6B5C; font-size: 12px; }
+    
+    .footer-note { margin-top: 35px; border-top: 1px solid #E8DCC8; padding-top: 15px; display: flex; justify-content: space-between; font-size: 10px; color: #7A5B37; }
+  </style>
+</head>
+<body>
+  <div class="invoice-card">
+    <div class="header-row">
+      <div>
+        <div class="brand-title">AL UMAR PERFUMES</div>
+        <div class="brand-sub">ATELIER DE PARFUMS • PURE DEHN AL OUD & ATTARS</div>
+        <div class="company-meta">
+          Al Umar Fragrances Pvt. Ltd. • Mumbai, Maharashtra 400001<br>
+          Seller GSTIN: <strong>27ABCDE1234F1Z5</strong> • State Code: 27 (Maharashtra)<br>
+          Email: orders@umarperfumes.com • www.alumarperfumes.com
+        </div>
+      </div>
+      <div class="invoice-title-block">
+        <div class="invoice-title">TAX INVOICE</div>
+        <div class="invoice-num">#ALU-2026-INV8821</div>
+        <div class="invoice-meta">Invoice Date: 17 Oct 2026</div>
+        <div><span class="badge">PAID • VERIFIED</span></div>
+        <div class="invoice-meta" style="margin-top:4px;">Txn Ref: pay_RZP_Sample_882194</div>
+        <div class="invoice-meta" style="color:#1E6B5C; font-weight:600;">Intra-State Supply (CGST + SGST)</div>
+      </div>
+    </div>
+
+    <div class="addresses-grid">
+      <div class="address-col">
+        <h4>Buyer / Consignee Details:</h4>
+        <p><strong>Dr. Zayd Al-Hussaini</strong><br>
+        Flat 12B, Al-Noor Heights, Bhendi Bazaar<br>
+        Mumbai, Maharashtra - 400003<br>
+        Phone: +91 98201 54321<br>
+        Email: zayd.hussaini@alumarperfumes.com<br>
+        <strong style="color:#1E6B5C;">Place of Supply: Maharashtra (Code 27)</strong></p>
+      </div>
+      <div class="address-col">
+        <h4>Dispatch Atelier & Fulfillment:</h4>
+        <p><strong>Al Umar Flagship Fulfillment Atelier</strong><br>
+        Central Fragrance Vault, Unit 4B<br>
+        Fort, South Mumbai - 400001, Maharashtra<br>
+        GSTIN: <strong>27ABCDE1234F1Z5</strong><br>
+        Origin State: Maharashtra (Code: 27)</p>
+      </div>
+    </div>
+
+    <table>
+      <thead>
+        <tr>
+          <th style="width: 35%;">Item & Option Description</th>
+          <th class="text-center" style="width: 12%;">HSN Code</th>
+          <th class="text-center" style="width: 8%;">Qty</th>
+          <th class="text-right" style="width: 12%;">Unit Rate</th>
+          <th class="text-right" style="width: 14%;">Taxable Val</th>
+          <th class="text-right" style="width: 14%;">GST (9+9%)</th>
+          <th class="text-right" style="width: 14%;">Total (₹)</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>
+            <div class="item-name">Royal Cambodian Dehn Al Oud</div>
+            <div class="item-size">Size: 12ml Aged Extract</div>
+          </td>
+          <td class="text-center">3303</td>
+          <td class="text-center">1</td>
+          <td class="text-right">₹4,999.00</td>
+          <td class="text-right">₹4,236.44</td>
+          <td class="text-right">₹762.56</td>
+          <td class="text-right" style="font-weight:700;">₹4,999.00</td>
+        </tr>
+        <tr>
+          <td>
+            <div class="item-name">Pure White Kasturi Musk Attar</div>
+            <div class="item-size">Size: 6ml Crystal Flacon</div>
+          </td>
+          <td class="text-center">3303</td>
+          <td class="text-center">2</td>
+          <td class="text-right">₹1,250.00</td>
+          <td class="text-right">₹2,118.64</td>
+          <td class="text-right">₹381.36</td>
+          <td class="text-right" style="font-weight:700;">₹2,500.00</td>
+        </tr>
+        <tr>
+          <td>
+            <div class="item-name">Taif Rose Sublime Attar</div>
+            <div class="item-size">Size: 3ml Botanical Extract</div>
+          </td>
+          <td class="text-center">3303</td>
+          <td class="text-center">1</td>
+          <td class="text-right">₹1,850.00</td>
+          <td class="text-right">₹1,567.80</td>
+          <td class="text-right">₹282.20</td>
+          <td class="text-right" style="font-weight:700;">₹1,850.00</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <div class="totals-container">
+      <div class="tax-box">
+        <h4>GST Breakdown (Intra-State: CGST + SGST @ 18%)</h4>
+        <div class="tax-row">
+          <span>Total Taxable Goods Value:</span>
+          <span>₹7,922.88</span>
+        </div>
+        <div class="tax-row">
+          <span>Central GST (CGST @ 9%):</span>
+          <span>₹713.06</span>
+        </div>
+        <div class="tax-row">
+          <span>State GST (SGST @ 9%):</span>
+          <span>₹713.06</span>
+        </div>
+        <div class="tax-row bold">
+          <span>Total GST Tax Included:</span>
+          <span>₹1,426.12</span>
+        </div>
+      </div>
+
+      <div class="summary-box">
+        <div class="summary-row">
+          <span>Items Subtotal:</span>
+          <span style="font-weight:600;">₹9,349.00</span>
+        </div>
+        <div class="summary-row discount">
+          <span>Promotional Coupon Discount:</span>
+          <span>-₹500.00</span>
+        </div>
+        <div class="summary-row">
+          <span>Express Tracked Shipping:</span>
+          <span style="font-weight:700; color:#1E6B5C;">FREE</span>
+        </div>
+        <div class="summary-row total">
+          <span>Invoice Total (INR):</span>
+          <span>₹8,849.00</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="words-box">
+      <div class="words-label">Total Amount in Words:</div>
+      <div class="words-val">Indian Rupees Eight Thousand Eight Hundred Forty-Nine Only</div>
+    </div>
+
+    <div class="footer-note">
+      <div>HSN Code: 3303 (Attars, perfumes, essential oils). Computer generated tax invoice. No signature required.</div>
+      <div>Thank you for choosing Al Umar Perfumes.</div>
+    </div>
+  </div>
+</body>
+</html>
