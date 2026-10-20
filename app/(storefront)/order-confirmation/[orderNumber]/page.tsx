@@ -64,13 +64,13 @@ export default async function OrderConfirmationPage({
             ✓
           </div>
           <span style={{ fontSize: '0.85rem', fontWeight: 'bold', textTransform: 'uppercase', letterSpacing: '0.1em', color: '#1E6B5C', background: 'rgba(30, 107, 92, 0.1)', padding: '0.3rem 0.8rem', borderRadius: '999px' }}>
-            Payment Confirmed
+            {order.paymentMethod === 'COD' ? 'Order Placed (Cash on Delivery)' : 'Payment Confirmed'}
           </span>
           <h1 className="section-title" style={{ marginTop: '0.75rem', marginBottom: '0.5rem', fontSize: '2rem' }}>
             Thank You for Your Order!
           </h1>
           <p style={{ color: '#553E23', fontSize: '0.95rem' }}>
-            Assalamu Alaikum <strong>{order.customerName}</strong>, your artisanal fragrance order has been placed successfully.
+            Assalamu Alaikum <strong>{order.customerName}</strong>, your artisanal fragrance order has been received and is being prepared.
           </p>
         </div>
 
@@ -81,6 +81,11 @@ export default async function OrderConfirmationPage({
             <div style={{ fontSize: '1.05rem', fontWeight: 'bold', color: '#553E23', fontFamily: 'monospace', marginTop: '0.2rem' }}>
               #{order.orderNumber}
             </div>
+            {order.awbNumber && (
+              <div style={{ fontSize: '0.8rem', color: '#1E6B5C', marginTop: '0.2rem' }}>
+                AWB: <strong>{order.awbNumber}</strong>
+              </div>
+            )}
           </div>
 
           <div>
@@ -88,12 +93,17 @@ export default async function OrderConfirmationPage({
             <div style={{ fontSize: '1.05rem', fontWeight: 'bold', color: '#1E6B5C', marginTop: '0.2rem' }}>
               {deliveryEstimate}
             </div>
+            {order.courierName && (
+              <div style={{ fontSize: '0.8rem', color: '#7A5B37', marginTop: '0.2rem' }}>
+                Via {order.courierName}
+              </div>
+            )}
           </div>
 
           <div>
-            <div style={{ fontSize: '0.75rem', textTransform: 'uppercase', color: '#7A5B37', fontWeight: 600 }}>Payment Status</div>
-            <div style={{ fontSize: '0.95rem', fontWeight: 'bold', color: '#137333', textTransform: 'uppercase', marginTop: '0.2rem' }}>
-              ● {order.paymentStatus}
+            <div style={{ fontSize: '0.75rem', textTransform: 'uppercase', color: '#7A5B37', fontWeight: 600 }}>Payment Method</div>
+            <div style={{ fontSize: '0.95rem', fontWeight: 'bold', color: order.paymentMethod === 'COD' ? '#B8860B' : '#137333', textTransform: 'uppercase', marginTop: '0.2rem' }}>
+              ● {order.paymentMethod === 'COD' ? 'Cash on Delivery (Pending)' : 'Prepaid (Paid Online)'}
             </div>
           </div>
         </div>

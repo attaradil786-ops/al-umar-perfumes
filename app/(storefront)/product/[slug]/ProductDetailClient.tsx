@@ -71,6 +71,58 @@ export default function ProductDetailClient({
   const [submittingReview, setSubmittingReview] = useState(false);
   const [reviewSuccess, setReviewSuccess] = useState(false);
 
+  // Delivery check state
+  const [deliveryPincode, setDeliveryPincode] = useState('');
+  const [checkingDelivery, setCheckingDelivery] = useState(false);
+  const [deliveryResult, setDeliveryResult] = useState<{
+    serviceable: boolean;
+    rate?: number;
+    estimatedDeliveryDays?: number;
+    courierName?: string;
+    cod?: boolean;
+    freeShipping?: boolean;
+    message?: string;
+  } | null>(null);
+  const [deliveryError, setDeliveryError] = useState('');
+
+  const handleCheckDelivery = async (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
+    const cleanPin = deliveryPincode.trim();
+    if (!/^\d{6}$/.test(cleanPin)) {
+      setDeliveryError('Please enter a valid 6-digit Indian PIN code');
+      setDeliveryResult(null);
+      return;
+    }
+
+    setCheckingDelivery(true);
+    setDeliveryError('');
+    try {
+      const declaredVal = currentPrice * quantity;
+      const res = await fetch(
+        `/api/shipping/check-serviceability?pincode=${cleanPin}&declaredValue=${declaredVal}&weight=0.5`
+      );
+      const data = await res.json();
+      if (!res.ok) {
+        setDeliveryError(data.error || 'Failed to check delivery serviceability');
+        setDeliveryResult(null);
+      } else {
+        setDeliveryResult({
+          serviceable: Boolean(data.serviceable),
+          rate: data.rate,
+          estimatedDeliveryDays: data.estimatedDeliveryDays,
+          courierName: data.courierName,
+          cod: data.cod,
+          freeShipping: Boolean(data.freeShipping),
+        });
+      }
+    } catch {
+      setDeliveryError('Network error checking delivery. Please try again.');
+      setDeliveryResult(null);
+    } finally {
+      setCheckingDelivery(false);
+    }
+  };
+
   // Active variant resolution
   const activeVariant = hasVariants
     ? rawVariants.find(v => v.label === selectedSize) || rawVariants[0]
@@ -404,8 +456,89 @@ Link: ${window.location.href}`;
               Quick Order via WhatsApp
             </button>
 
+            {/* Shiprocket Delivery Serviceability Checker */}
+            <div className="pt-2">
+              <div className="p-3.5 rounded-2xl bg-[#FFF8EC] border border-[#E8DCC8] space-y-2.5">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-bold text-[#553E23] flex items-center gap-1.5">
+                    <span>🚚</span> Check Delivery &amp; COD Availability
+                  </span>
+                  <span className="text-[10px] text-[#7A5B37]">Shiprocket Express</span>
+                </div>
+
+                <form onSubmit={handleCheckDelivery} className="flex gap-2">
+                  <input
+                    type="text"
+                    maxLength={6}
+                    placeholder="Enter 6-digit PIN Code"
+                    value={deliveryPincode}
+                    onChange={(e) => {
+                      setDeliveryPincode(e.target.value.replace(/\D/g, ''));
+                      setDeliveryError('');
+                    }}
+                    className="flex-1 px-3 py-2 text-xs font-mono rounded-xl border border-[#D1C8BA] bg-white text-[#121212] focus:outline-none focus:ring-1 focus:ring-[#1E6B5C]"
+                  />
+                  <button
+                    type="submit"
+                    disabled={checkingDelivery || deliveryPincode.trim().length !== 6}
+                    className="px-4 py-2 bg-[#1E6B5C] hover:bg-[#165A4A] text-white text-xs font-bold rounded-xl transition disabled:opacity-50"
+                  >
+                    {checkingDelivery ? 'Checking...' : 'Check'}
+                  </button>
+                </form>
+
+                {deliveryError && (
+                  <p className="text-[11px] text-red-600 font-medium">✕ {deliveryError}</p>
+                )}
+
+                {deliveryResult && (
+                  <div
+                    className={`p-2.5 rounded-xl text-xs space-y-1 border ${
+                      deliveryResult.serviceable
+                        ? 'bg-emerald-50 border-emerald-200 text-emerald-900'
+                        : 'bg-red-50 border-red-200 text-red-800'
+                    }`}
+                  >
+                    {deliveryResult.serviceable ? (
+                      <>
+                        <div className="font-bold flex items-center gap-1 text-emerald-800">
+                          <span>✓</span> Serviceable to PIN {deliveryPincode}!
+                        </div>
+                        <div className="text-[11px] text-emerald-700 flex flex-wrap gap-x-3 gap-y-1">
+                          <span>
+                            • Estimated Delivery:{' '}
+                            <strong>
+                              {deliveryResult.estimatedDeliveryDays
+                                ? `${deliveryResult.estimatedDeliveryDays} days`
+                                : '2-4 business days'}
+                            </strong>
+                          </span>
+                          {deliveryResult.courierName && (
+                            <span>• Partner: {deliveryResult.courierName}</span>
+                          )}
+                          <span>
+                            • Shipping:{' '}
+                            <strong className="text-emerald-800">
+                              {deliveryResult.freeShipping
+                                ? 'FREE (Orders > ₹1500)'
+                                : `₹${deliveryResult.rate || 79}`}
+                            </strong>
+                          </span>
+                          {deliveryResult.cod && <span>• Cash on Delivery Available</span>}
+                        </div>
+                      </>
+                    ) : (
+                      <div className="font-semibold text-[11px] text-red-700">
+                        ✕ Sorry, delivery is currently not serviceable to PIN {deliveryPincode}. Please try an alternate delivery address.
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+            </div>
+
             {/* Badges */}
-            <div className="grid grid-cols-3 gap-2 pt-4 text-center">
+            <div className="grid grid-cols-3 gap-2 pt-2 text-center">
               <div className="p-2.5 rounded-xl bg-[#FFF8EC] border border-[#E8DCC8]">
                 <p className="text-[10px] font-bold text-[#553E23]">100% PURE</p>
                 <p className="text-[9px] text-[#7A5B37]">Zero Alcohol</p>

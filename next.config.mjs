@@ -1,7 +1,7 @@
 import { withSentryConfig } from '@sentry/nextjs/config';
 
 /** @type {import('next').NextConfig} */
-const adminBasePath = (process.env.ADMIN_BASE_PATH || '/studio-alumar-9f7x2k').replace(/^\//, '');
+const adminBasePath = (process.env.ADMIN_BASE_PATH || '/admin8080').replace(/^\//, '');
 
 const nextConfig = {
   eslint: {

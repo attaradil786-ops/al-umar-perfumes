@@ -40,6 +40,98 @@ export default function CheckoutPage() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [checkoutError, setCheckoutError] = useState('');
 
+  // Shipping & Logistics states
+  const [paymentMethod, setPaymentMethod] = useState<'PREPAID' | 'COD'>('PREPAID');
+  const [shippingSettings, setShippingSettings] = useState<{
+    shipping_mode: string;
+    flat_rate: number;
+    free_above: number;
+    cod_enabled: boolean;
+    cod_fee: number;
+  }>({
+    shipping_mode: 'live_rates',
+    flat_rate: 79,
+    free_above: 1500,
+    cod_enabled: true,
+    cod_fee: 0,
+  });
+
+  const [serviceability, setServiceability] = useState<{
+    serviceable: boolean;
+    rate: number;
+    estimatedDeliveryDays?: number;
+    courierName?: string;
+    cod?: boolean;
+  } | null>(null);
+  const [checkingServiceability, setCheckingServiceability] = useState(false);
+  const [serviceabilityMessage, setServiceabilityMessage] = useState('');
+
+  // Calculate cart weight in KG (default 0.5kg per item)
+  const totalWeight = Math.max(0.5, cart.reduce((acc, item) => acc + (0.5 * item.quantity), 0));
+
+  // Load Shipping Settings from Server on mount
+  useEffect(() => {
+    fetch('/api/admin/settings/shipping')
+      .then(r => r.json())
+      .then(res => {
+        if (res.success && res.settings) {
+          setShippingSettings(res.settings);
+        }
+      })
+      .catch(() => {
+        // Fall back to default settings
+      });
+  }, []);
+
+  // Live Shiprocket serviceability check on 6-digit PIN code
+  useEffect(() => {
+    const pin = formData.pincode.trim();
+    if (pin.length !== 6 || !/^\d{6}$/.test(pin)) {
+      setServiceability(null);
+      setServiceabilityMessage('');
+      return;
+    }
+
+    let active = true;
+    setCheckingServiceability(true);
+    setServiceabilityMessage('');
+
+    const isCod = paymentMethod === 'COD' ? 1 : 0;
+    fetch(`/api/shipping/check-serviceability?pincode=${pin}&weight=${totalWeight}&declaredValue=${subtotal}&cod=${isCod}`)
+      .then(r => r.json())
+      .then(data => {
+        if (!active) return;
+        if (data.serviceable) {
+          setServiceability({
+            serviceable: true,
+            rate: Number(data.rate) || shippingSettings.flat_rate || 79,
+            estimatedDeliveryDays: data.estimatedDeliveryDays,
+            courierName: data.courierName,
+            cod: Boolean(data.cod),
+          });
+          setServiceabilityMessage(`✓ Deliverable via ${data.courierName || 'Shiprocket'} in ~${data.estimatedDeliveryDays || '2-4'} days`);
+        } else {
+          setServiceability({
+            serviceable: false,
+            rate: shippingSettings.flat_rate || 79,
+          });
+          setServiceabilityMessage(data.error || 'Delivery not available to this PIN code via Shiprocket.');
+        }
+      })
+      .catch(() => {
+        if (!active) return;
+        setServiceability({ serviceable: true, rate: shippingSettings.flat_rate || 79 });
+        setServiceabilityMessage('Using standard delivery rate.');
+      })
+      .finally(() => {
+        if (active) setCheckingServiceability(false);
+      });
+
+    return () => {
+      active = false;
+    };
+  }, [formData.pincode, totalWeight, subtotal, paymentMethod, shippingSettings.flat_rate]);
+
   // Automatically remove coupon if subtotal falls below minOrder, or dynamically recalculate percentage discount
   useEffect(() => {
     if (appliedCoupon) {
@@ -58,7 +150,7 @@ export default function CheckoutPage() {
           const pct = Math.min(100, Math.max(0, appliedCoupon.value || 0));
           dynamicDiscount = Math.min(subtotal, Math.round((subtotal * pct) / 100));
         } else if (typeUpper === 'FREE_SHIPPING' || typeUpper === 'FREESHIPPING') {
-          dynamicDiscount = subtotal >= 1500 ? 0 : 100;
+          dynamicDiscount = subtotal >= (shippingSettings.free_above || 1500) ? 0 : 79;
         } else {
           dynamicDiscount = Math.min(appliedCoupon.value || 0, subtotal);
         }
@@ -67,7 +159,7 @@ export default function CheckoutPage() {
         }
       }
     }
-  }, [subtotal, appliedCoupon]);
+  }, [subtotal, appliedCoupon, shippingSettings.free_above]);
 
   // Validate cart against server on mount & track begin_checkout
   useEffect(() => {
@@ -99,9 +191,16 @@ export default function CheckoutPage() {
     }
   }, []);
 
-  const shipping = subtotal >= 1500 || cart.length === 0 ? 0 : 100;
+  // Shipping calculation: Free above threshold, else live rates or flat rate
+  const freeAbove = shippingSettings.free_above || 1500;
+  const isFreeShipping = subtotal >= freeAbove || appliedCoupon?.type === 'FREE_SHIPPING';
+  const shipping = isFreeShipping || cart.length === 0
+    ? 0
+    : (serviceability?.rate !== undefined ? serviceability.rate : (shippingSettings.flat_rate || 79));
+
+  const codFee = (paymentMethod === 'COD' && shippingSettings.cod_enabled) ? (shippingSettings.cod_fee || 0) : 0;
   const discount = appliedCoupon ? appliedCoupon.discount : 0;
-  const finalTotal = Math.max(0, subtotal - discount + shipping);
+  const finalTotal = Math.max(0, subtotal - discount + shipping + codFee);
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
     const { name, value } = e.target;
@@ -183,6 +282,12 @@ export default function CheckoutPage() {
       return;
     }
 
+    // Step 2: Block checkout if pincode is explicitly unserviceable
+    if (serviceability && !serviceability.serviceable) {
+      setCheckoutError('Cannot proceed: The destination PIN code is not serviceable for shipping. Please enter a serviceable delivery PIN code.');
+      return;
+    }
+
     setIsSubmitting(true);
 
     try {
@@ -198,6 +303,7 @@ export default function CheckoutPage() {
           city: formData.city,
           state: formData.state,
           pincode: formData.pincode,
+          paymentMethod: paymentMethod, // 'PREPAID' | 'COD'
           items: cart.map(item => ({
             productId: item.id,
             name: item.name,
@@ -212,8 +318,15 @@ export default function CheckoutPage() {
       const orderData = await createOrderRes.json();
 
       if (!createOrderRes.ok || !orderData.success) {
-        setCheckoutError(orderData.error || 'Failed to initialize payment.');
+        setCheckoutError(orderData.error || 'Failed to initialize order.');
         setIsSubmitting(false);
+        return;
+      }
+
+      // If COD, order is confirmed immediately without gateway
+      if (paymentMethod === 'COD') {
+        clearCart();
+        router.push(`/order-confirmation/${orderData.orderNumber}`);
         return;
       }
 
@@ -470,6 +583,112 @@ export default function CheckoutPage() {
                   {formErrors.pincode && <span style={{ color: '#dc3545', fontSize: '0.75rem', display: 'block', marginTop: '0.2rem' }}>{formErrors.pincode}</span>}
                 </div>
               </div>
+
+              {/* Live Shiprocket Serviceability Indicator */}
+              {checkingServiceability && (
+                <div style={{ padding: '0.6rem 0.9rem', background: '#FFF8EC', border: '1px solid #E8DCC8', borderRadius: '8px', fontSize: '0.8rem', color: '#7A5B37', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                  <span>⏳</span> Checking Shiprocket courier delivery serviceability...
+                </div>
+              )}
+              {!checkingServiceability && serviceabilityMessage && (
+                <div
+                  style={{
+                    padding: '0.6rem 0.9rem',
+                    background: serviceability?.serviceable ? '#e6f4ea' : '#fce8e6',
+                    border: `1px solid ${serviceability?.serviceable ? '#ceead6' : '#fad2cf'}`,
+                    borderRadius: '8px',
+                    fontSize: '0.8rem',
+                    color: serviceability?.serviceable ? '#137333' : '#c5221f',
+                    fontWeight: 500,
+                  }}
+                >
+                  {serviceability?.serviceable ? '✓ ' : '✕ '}
+                  {serviceabilityMessage}
+                </div>
+              )}
+
+              {/* STEP 2: Payment Method Selector */}
+              <div style={{ marginTop: '1.5rem', paddingTop: '1.25rem', borderTop: '1px solid #E8DCC8' }}>
+                <h3 style={{ fontFamily: 'var(--font-luxury)', color: '#553E23', fontSize: '1.1rem', marginBottom: '0.75rem' }}>
+                  Select Payment Method
+                </h3>
+
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+                  {/* Prepaid Razorpay Option */}
+                  <label
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '0.75rem',
+                      padding: '0.85rem 1rem',
+                      borderRadius: '10px',
+                      border: `1.5px solid ${paymentMethod === 'PREPAID' ? '#1E6B5C' : '#E8DCC8'}`,
+                      background: paymentMethod === 'PREPAID' ? '#F2FAF7' : '#FFFFFF',
+                      cursor: 'pointer',
+                      transition: 'all 0.2s',
+                    }}
+                  >
+                    <input
+                      type="radio"
+                      name="paymentMethod"
+                      value="PREPAID"
+                      checked={paymentMethod === 'PREPAID'}
+                      onChange={() => setPaymentMethod('PREPAID')}
+                      style={{ accentColor: '#1E6B5C', width: '16px', height: '16px' }}
+                    />
+                    <div style={{ flex: 1 }}>
+                      <div style={{ fontSize: '0.85rem', fontWeight: 600, color: '#121212', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                        <span>Online Payment (UPI, Cards, NetBanking)</span>
+                        <span style={{ fontSize: '0.7rem', background: '#1E6B5C', color: 'white', padding: '1px 6px', borderRadius: '4px', fontWeight: 700 }}>
+                          RECOMMENDED
+                        </span>
+                      </div>
+                      <div style={{ fontSize: '0.75rem', color: '#7A5B37', marginTop: '0.15rem' }}>
+                        Instant verification via Razorpay • 100% Secure &amp; Fast Dispatch
+                      </div>
+                    </div>
+                  </label>
+
+                  {/* Cash on Delivery Option */}
+                  {shippingSettings.cod_enabled && (
+                    <label
+                      style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '0.75rem',
+                        padding: '0.85rem 1rem',
+                        borderRadius: '10px',
+                        border: `1.5px solid ${paymentMethod === 'COD' ? '#1E6B5C' : '#E8DCC8'}`,
+                        background: paymentMethod === 'COD' ? '#F2FAF7' : '#FFFFFF',
+                        cursor: 'pointer',
+                        transition: 'all 0.2s',
+                      }}
+                    >
+                      <input
+                        type="radio"
+                        name="paymentMethod"
+                        value="COD"
+                        checked={paymentMethod === 'COD'}
+                        onChange={() => setPaymentMethod('COD')}
+                        style={{ accentColor: '#1E6B5C', width: '16px', height: '16px' }}
+                      />
+                      <div style={{ flex: 1 }}>
+                        <div style={{ fontSize: '0.85rem', fontWeight: 600, color: '#121212', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                          <span>Cash on Delivery (COD)</span>
+                          {shippingSettings.cod_fee > 0 && (
+                            <span style={{ fontSize: '0.7rem', background: '#FFF8EC', border: '1px solid #E8DCC8', color: '#553E23', padding: '1px 6px', borderRadius: '4px' }}>
+                              +₹{shippingSettings.cod_fee} Fee
+                            </span>
+                          )}
+                        </div>
+                        <div style={{ fontSize: '0.75rem', color: '#7A5B37', marginTop: '0.15rem' }}>
+                          Pay with cash or UPI QR directly to the courier executive upon delivery
+                        </div>
+                      </div>
+                    </label>
+                  )}
+                </div>
+              </div>
             </form>
           </div>
 
@@ -599,9 +818,22 @@ export default function CheckoutPage() {
               )}
 
               <div style={{ display: 'flex', justifyContent: 'space-between', color: '#553E23' }}>
-                <span>Standard Delivery (BlueDart/DTDC)</span>
-                <span>{shipping === 0 ? <strong style={{ color: '#1E6B5C' }}>FREE</strong> : `₹${shipping}`}</span>
+                <span>Shiprocket Express Delivery</span>
+                <span>
+                  {shipping === 0 ? (
+                    <strong style={{ color: '#1E6B5C' }}>FREE (Orders &gt; ₹{freeAbove})</strong>
+                  ) : (
+                    `₹${shipping}`
+                  )}
+                </span>
               </div>
+
+              {paymentMethod === 'COD' && codFee > 0 && (
+                <div style={{ display: 'flex', justifyContent: 'space-between', color: '#553E23' }}>
+                  <span>Cash on Delivery Fee</span>
+                  <span>₹{codFee}</span>
+                </div>
+              )}
 
               <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '1.2rem', fontWeight: 'bold', color: '#1E6B5C', borderTop: '1px solid #E8DCC8', paddingTop: '0.75rem', marginTop: '0.5rem' }}>
                 <span>Total Amount</span>
@@ -609,20 +841,36 @@ export default function CheckoutPage() {
               </div>
             </div>
 
-            {/* STEP 3: "Pay Now" Button */}
+            {/* STEP 3: Submit / Place Order Button */}
             <div style={{ marginTop: '1.5rem' }}>
               <button
                 type="submit"
                 form="checkout-form"
-                disabled={isSubmitting}
+                disabled={isSubmitting || (Boolean(serviceability) && !serviceability?.serviceable)}
                 className="btn-green"
-                style={{ width: '100%', padding: '1rem', fontSize: '1.05rem', textAlign: 'center', opacity: isSubmitting ? 0.7 : 1, cursor: isSubmitting ? 'not-allowed' : 'pointer' }}
+                style={{
+                  width: '100%',
+                  padding: '1rem',
+                  fontSize: '1.05rem',
+                  textAlign: 'center',
+                  opacity: (isSubmitting || (Boolean(serviceability) && !serviceability?.serviceable)) ? 0.6 : 1,
+                  cursor: (isSubmitting || (Boolean(serviceability) && !serviceability?.serviceable)) ? 'not-allowed' : 'pointer',
+                  background: paymentMethod === 'COD' ? '#553E23' : undefined,
+                }}
               >
-                {isSubmitting ? 'Processing Payment...' : `Pay ₹${finalTotal.toLocaleString('en-IN')} with Razorpay →`}
+                {isSubmitting
+                  ? (paymentMethod === 'COD' ? 'Placing Order...' : 'Processing Payment...')
+                  : (serviceability && !serviceability.serviceable)
+                  ? 'PIN Code Not Serviceable'
+                  : paymentMethod === 'COD'
+                  ? `Confirm Order (Cash on Delivery) • ₹${finalTotal.toLocaleString('en-IN')} →`
+                  : `Pay ₹${finalTotal.toLocaleString('en-IN')} with Razorpay →`}
               </button>
 
               <div style={{ textAlign: 'center', marginTop: '0.75rem', fontSize: '0.75rem', color: '#7A5B37' }}>
-                🔒 256-bit Encrypted Checkout • Cards, UPI, NetBanking &amp; Wallets
+                {paymentMethod === 'COD'
+                  ? '📦 Pay upon delivery • Inspect tamper-evident seal before receiving'
+                  : '🔒 256-bit Encrypted Checkout • Cards, UPI, NetBanking & Wallets'}
               </div>
             </div>
           </div>

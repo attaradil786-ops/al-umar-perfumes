@@ -26,6 +26,11 @@ model Product {
   taxRate      Int         @default(18)
   hsnCode      String      @default("3303")
   unitType     String?     @default("ml")
+  weight       Float       @default(0.5) // in kg (default 0.5kg)
+  length       Float       @default(10)  // in cm (default 10cm)
+  breadth      Float       @default(10)  // in cm (default 10cm)
+  height       Float       @default(10)  // in cm (default 10cm)
+  sku          String?
   variants     Json?
   createdAt    DateTime    @default(now())
   updatedAt    DateTime    @updatedAt
@@ -33,28 +38,38 @@ model Product {
 }
 
 model Order {
-  id            String      @id @default(cuid())
-  orderNumber   String      @unique
-  customerName  String
-  phone         String
-  email         String?
-  address       String
-  city          String
-  state         String
-  pincode       String
-  items         OrderItem[]
-  subtotal      Int
-  discount      Int         @default(0)
-  shipping      Int         @default(0)
-  total         Int
-  couponCode    String?
-  paymentStatus String      @default("PENDING")
-  paymentId     String?
-  status        String      @default("PENDING")
-  trackingUrl   String?
-  awbNumber     String?
-  shipmentId    String?
-  createdAt     DateTime    @default(now())
+  id                        String      @id @default(cuid())
+  orderNumber               String      @unique
+  customerName              String
+  phone                     String
+  email                     String?
+  address                   String
+  city                      String
+  state                     String
+  pincode                   String
+  items                     OrderItem[]
+  subtotal                  Int
+  discount                  Int         @default(0)
+  shipping                  Int         @default(0)
+  codFee                    Int         @default(0)
+  total                     Int
+  couponCode                String?
+  paymentStatus             String      @default("PENDING")
+  paymentMethod             String      @default("PREPAID") // PREPAID or COD
+  paymentId                 String?
+  status                    String      @default("PENDING")
+  trackingUrl               String?
+  awbNumber                 String?
+  shipmentId                String?
+  courierName               String?
+  shipmentStatus            String?     // pending, created, shipped, failed, delivered
+  shipmentError             String?
+  labelUrl                  String?
+  pickupTokenNumber         String?
+  shippedNotificationSent   Boolean     @default(false)
+  deliveredNotificationSent Boolean     @default(false)
+  createdAt                 DateTime    @default(now())
+  updatedAt                 DateTime    @default(now()) @updatedAt
 }
 
 model OrderItem {
@@ -62,6 +77,7 @@ model OrderItem {
   orderId   String
   order     Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
   productId String
+  sku       String?
   name      String
   price     Int
   quantity  Int
@@ -87,14 +103,16 @@ model SiteContent {
 }
 
 model Admin {
-  id          String    @id @default(cuid())
-  email       String    @unique
-  password    String
-  totpSecret  String?
-  totpEnabled Boolean   @default(false)
-  lastLoginAt DateTime?
-  lastLoginIp String?
-  createdAt   DateTime  @default(now())
+  id              String    @id @default(cuid())
+  email           String    @unique
+  password        String
+  securitySport   String?
+  securityTeacher String?
+  totpSecret      String?
+  totpEnabled     Boolean   @default(false)
+  lastLoginAt     DateTime?
+  lastLoginIp     String?
+  createdAt       DateTime  @default(now())
 }
 
 model LoginAttempt {

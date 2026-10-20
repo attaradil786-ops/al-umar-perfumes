@@ -4,7 +4,7 @@ import { getToken } from 'next-auth/jwt';
 export async function middleware(req: NextRequest) {
   const { pathname } = req.nextUrl;
 
-  const rawAdminPath = process.env.ADMIN_BASE_PATH || '/studio-alumar-9f7x2k';
+  const rawAdminPath = process.env.ADMIN_BASE_PATH || '/admin8080';
   const adminSegment = rawAdminPath.replace(/^\//, '').replace(/\/$/, '');
   const adminPrefix = `/${adminSegment}`;
 
@@ -54,7 +54,7 @@ export async function middleware(req: NextRequest) {
           userAgent,
           success,
         }),
-      }).catch(() => {});
+      }).catch(() => { });
     } catch {
       // Ignore background logging errors
     }

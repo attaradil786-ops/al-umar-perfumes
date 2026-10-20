@@ -145,7 +145,7 @@ try {
 
 # 7c: Unauthenticated access to secret admin route without cookie
 try {
-  $res = Invoke-WebRequest -Uri "$BaseUrl/studio-alumar-9f7x2k/products" -SkipHttpErrorCheck -TimeoutSec 5
+  $res = Invoke-WebRequest -Uri "$BaseUrl/admin8080/products" -SkipHttpErrorCheck -TimeoutSec 5
   Test-Endpoint "7c: Unauthenticated {ADMIN_BASE_PATH} returns HTTP 404" 404 $res.StatusCode
 } catch {
   Test-Endpoint "7c: Unauthenticated {ADMIN_BASE_PATH} returns HTTP 404" 404 404

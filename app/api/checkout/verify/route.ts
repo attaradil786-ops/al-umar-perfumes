@@ -2,6 +2,9 @@ import { NextRequest, NextResponse } from 'next/server';
 import prisma from '@/lib/prisma';
 import crypto from 'crypto';
 import { Resend } from 'resend';
+import { getShippingSettings } from '@/lib/shipping-settings';
+import { createShipment } from '@/lib/shiprocket';
+import { triggerOrderStatusNotifications } from '@/lib/notifications';
 
 export async function POST(req: NextRequest) {
   try {
@@ -127,56 +130,96 @@ export async function POST(req: NextRequest) {
       }
     });
 
-    // Send confirmation email via Resend if email is provided
-    if (order.email && process.env.RESEND_API_KEY && !process.env.RESEND_API_KEY.includes('placeholder')) {
-      try {
-        const resend = new Resend(process.env.RESEND_API_KEY);
-        const itemsListHtml = order.items
-          .map(
-            i => `<tr>
-              <td style="padding: 8px; border-bottom: 1px solid #E8DCC8;">${i.name} (${i.size || 'Standard'})</td>
-              <td style="padding: 8px; border-bottom: 1px solid #E8DCC8; text-align: center;">${i.quantity}</td>
-              <td style="padding: 8px; border-bottom: 1px solid #E8DCC8; text-align: right;">₹${i.price * i.quantity}</td>
-            </tr>`
-          )
-          .join('');
+    // Dispatch order confirmation notifications across Email & WhatsApp
+    triggerOrderStatusNotifications(
+      {
+        orderNumber: order.orderNumber,
+        customerName: order.customerName,
+        phone: order.phone,
+        email: order.email,
+        total: order.total,
+        subtotal: order.subtotal,
+        discount: order.discount,
+        shipping: order.shipping,
+        address: order.address,
+        city: order.city,
+        state: order.state,
+        pincode: order.pincode,
+        items: order.items,
+      },
+      'placed'
+    ).catch(err => console.error('Order placed notification error:', err));
 
-        await resend.emails.send({
-          from: 'Al Umar Perfumes <orders@alumarperfumes.com>',
-          to: order.email,
-          subject: `Order Confirmation #${order.orderNumber} - Al Umar Perfumes`,
-          html: `
-            <div style="font-family: 'Plus Jakarta Sans', sans-serif; max-width: 600px; margin: 0 auto; background: #FFF8EC; padding: 24px; border-radius: 12px; border: 1px solid #E8DCC8; color: #121212;">
-              <h1 style="color: #1E6B5C; font-family: serif; font-size: 24px; margin-bottom: 8px;">Order Confirmed!</h1>
-              <p style="color: #553E23; font-size: 14px;">Assalamu Alaikum <strong>${order.customerName}</strong>,</p>
-              <p style="color: #553E23; font-size: 14px; line-height: 1.6;">
-                Thank you for your order with Al Umar Perfumes. Your payment has been received and your artisanal fragrance parcel is being prepared at our atelier.
-              </p>
-              <div style="background: white; border-radius: 8px; padding: 16px; margin: 20px 0; border: 1px solid #E8DCC8;">
-                <p style="margin: 0 0 12px 0; font-weight: bold; color: #553E23;">Order Details: #${order.orderNumber}</p>
-                <table style="width: 100%; border-collapse: collapse; font-size: 13px;">
-                  <thead>
-                    <tr style="background: #F8F4EC; color: #553E23;">
-                      <th style="padding: 8px; text-align: left;">Item</th>
-                      <th style="padding: 8px; text-align: center;">Qty</th>
-                      <th style="padding: 8px; text-align: right;">Amount</th>
-                    </tr>
-                  </thead>
-                  <tbody>${itemsListHtml}</tbody>
-                </table>
-                <div style="margin-top: 16px; text-align: right; font-size: 14px; font-weight: bold; color: #1E6B5C;">
-                  Total Paid: ₹${order.total.toLocaleString('en-IN')}
-                </div>
-              </div>
-              <p style="font-size: 12px; color: #7A5B37;">
-                Delivery Address: ${order.address}, ${order.city}, ${order.state} - ${order.pincode}<br/>
-                Contact: ${order.phone}
-              </p>
-            </div>
-          `,
+    // Check if auto_ship_on_payment is enabled in Shipping Settings
+    const shippingSettings = await getShippingSettings();
+    if (shippingSettings.auto_ship_on_payment && !order.awbNumber) {
+      try {
+        console.log(`[Auto-Ship] Triggering automated Shiprocket dispatch for Order #${order.orderNumber}...`);
+        const shipment = await createShipment({
+          id: order.id,
+          orderNumber: order.orderNumber,
+          customerName: order.customerName,
+          phone: order.phone,
+          email: order.email,
+          address: order.address,
+          city: order.city,
+          state: order.state,
+          pincode: order.pincode,
+          subtotal: order.subtotal,
+          discount: order.discount,
+          shipping: order.shipping,
+          total: order.total,
+          paymentMethod: 'PREPAID',
+          createdAt: order.createdAt,
+          items: order.items,
         });
-      } catch (emailErr) {
-        console.error('Failed to send order confirmation email via Resend:', emailErr);
+
+        const trackingUrl = `https://shiprocket.co/tracking/${shipment.awb_number}`;
+
+        const updatedOrder = await prisma.order.update({
+          where: { id: order.id },
+          data: {
+            status: 'shipped',
+            shipmentStatus: 'shipped',
+            awbNumber: shipment.awb_number,
+            courierName: shipment.courier_name,
+            shipmentId: shipment.shipment_id,
+            trackingUrl,
+            shippedNotificationSent: true,
+          },
+        });
+
+        // Send Order Shipped notification with AWB & tracking link
+        triggerOrderStatusNotifications(
+          {
+            orderNumber: updatedOrder.orderNumber,
+            customerName: updatedOrder.customerName,
+            phone: updatedOrder.phone,
+            email: updatedOrder.email,
+            total: updatedOrder.total,
+            subtotal: updatedOrder.subtotal,
+            discount: updatedOrder.discount,
+            shipping: updatedOrder.shipping,
+            address: updatedOrder.address,
+            city: updatedOrder.city,
+            state: updatedOrder.state,
+            pincode: updatedOrder.pincode,
+            awbNumber: updatedOrder.awbNumber,
+            trackingUrl: updatedOrder.trackingUrl,
+            items: order.items,
+          },
+          'shipped'
+        ).catch(err => console.error('Auto-ship notification error:', err));
+      } catch (shipErr: any) {
+        console.error(`[Auto-Ship Error for Order #${order.orderNumber}]:`, shipErr);
+        await prisma.order.update({
+          where: { id: order.id },
+          data: {
+            shipmentStatus: 'failed',
+            shipmentError: shipErr.message || 'Auto-shipment push failed',
+          },
+        });
+        // Never lose order - keeps order placed and marked as failed for manual retry in admin
       }
     }
 

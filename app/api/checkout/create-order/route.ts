@@ -3,6 +3,9 @@ import prisma from '@/lib/prisma';
 import { AddressFormSchema } from '@/lib/validators';
 import Razorpay from 'razorpay';
 import crypto from 'crypto';
+import { getServiceability } from '@/lib/shiprocket';
+import { getShippingSettings } from '@/lib/shipping-settings';
+import { triggerOrderStatusNotifications } from '@/lib/notifications';
 
 export async function POST(req: NextRequest) {
   try {
@@ -187,15 +190,76 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    // Shipping calculation: Free over 1500 or if FREE_SHIPPING coupon applied
-    const initialShipping = calculatedSubtotal >= 1500 ? 0 : 100;
-    const finalShipping = appliedCouponCode && couponCode?.toUpperCase().includes('FREE') ? 0 : initialShipping;
-    const finalTotal = Math.max(0, calculatedSubtotal - discount + finalShipping);
+    // STEP 2: Server-side shipping calculation with Shiprocket
+    const shippingSettings = await getShippingSettings();
+    const cleanPincode = pincode.replace(/\D/g, '').trim();
+    const isCODRequested = String(body.paymentMethod || '').toUpperCase() === 'COD';
 
-    // If client provided expected total, reject if it doesn't match server calculated total
+    // Calculate total package weight
+    let totalCartWeight = 0;
+    for (const item of validatedOrderItems) {
+      const dbProd = productMap.get(item.productId);
+      const itemWeight = (dbProd && dbProd.weight) || 0.5;
+      totalCartWeight += itemWeight * item.quantity;
+    }
+    totalCartWeight = Math.max(0.5, totalCartWeight);
+
+    // Verify destination pincode serviceability via Shiprocket
+    const serviceability = await getServiceability(
+      cleanPincode,
+      totalCartWeight,
+      isCODRequested,
+      calculatedSubtotal
+    );
+
+    if (!serviceability.serviceable) {
+      return NextResponse.json(
+        {
+          success: false,
+          error: serviceability.error || `Delivery is not serviceable to pincode ${cleanPincode}. Please choose another delivery address.`,
+        },
+        { status: 400 }
+      );
+    }
+
+    // Server-side Shipping rate rule:
+    // 1. If subtotal >= free_above, shipping = 0
+    // 2. Else if shipping_mode is "live_rates", use cheapest rate from getServiceability()
+    // 3. If Shiprocket fails or mode is "flat", fall back to flat_rate
+    let finalShipping = 0;
+    const isFreeShipping =
+      calculatedSubtotal >= shippingSettings.free_above ||
+      Boolean(appliedCouponCode && couponCode?.toUpperCase().includes('FREE'));
+
+    if (!isFreeShipping) {
+      if (shippingSettings.shipping_mode === 'live_rates') {
+        finalShipping = serviceability.rate || shippingSettings.flat_rate;
+      } else {
+        finalShipping = shippingSettings.flat_rate;
+      }
+    }
+
+    // COD Validation and Fee calculation
+    let codFee = 0;
+    let paymentMethod = 'PREPAID';
+
+    if (isCODRequested) {
+      if (!shippingSettings.cod_enabled) {
+        return NextResponse.json(
+          { success: false, error: 'Cash on Delivery (COD) is currently disabled.' },
+          { status: 400 }
+        );
+      }
+      paymentMethod = 'COD';
+      codFee = shippingSettings.cod_fee || 0;
+    }
+
+    const finalTotal = Math.max(0, calculatedSubtotal - discount + finalShipping + codFee);
+
+    // If client provided expected total, reject if there's any discrepancy
     if (body.clientTotal !== undefined && Math.abs(Number(body.clientTotal) - finalTotal) > 0) {
       return NextResponse.json(
-        { success: false, error: 'Price or discount discrepancy detected. Please refresh your cart.' },
+        { success: false, error: 'Price or delivery fee discrepancy detected. Please review your order summary.' },
         { status: 400 }
       );
     }
@@ -204,7 +268,98 @@ export async function POST(req: NextRequest) {
     const randomNonce = crypto.randomBytes(3).toString('hex').toUpperCase();
     const orderNumber = `ALU-${Date.now().toString(36).toUpperCase()}-${randomNonce}`;
 
-    // Create Order with paymentStatus="pending", status="placed"
+    // ------------------------------------------------------------------------
+    // CASE 1: Cash on Delivery (COD)
+    // ------------------------------------------------------------------------
+    if (paymentMethod === 'COD') {
+      const order = await prisma.$transaction(async (tx) => {
+        // Create Order with paymentStatus="pending_cod", status="placed"
+        const createdOrder = await tx.order.create({
+          data: {
+            orderNumber,
+            customerName: name.trim(),
+            phone: phone.trim(),
+            email: email && email.trim() ? email.trim() : null,
+            address: address.trim(),
+            city: city.trim(),
+            state: state.trim(),
+            pincode: cleanPincode,
+            subtotal: calculatedSubtotal,
+            discount,
+            shipping: finalShipping,
+            codFee,
+            total: finalTotal,
+            couponCode: appliedCouponCode,
+            paymentMethod: 'COD',
+            paymentStatus: 'pending_cod',
+            status: 'placed',
+            items: {
+              create: validatedOrderItems.map(item => ({
+                productId: item.productId,
+                name: item.name,
+                price: item.price,
+                quantity: item.quantity,
+                size: item.size,
+              })),
+            },
+          },
+          include: { items: true },
+        });
+
+        // Decrement stock immediately for COD orders
+        for (const item of validatedOrderItems) {
+          const prod = await tx.product.findUnique({ where: { id: item.productId } });
+          if (prod) {
+            await tx.product.update({
+              where: { id: item.productId },
+              data: { stock: Math.max(0, prod.stock - item.quantity) },
+            });
+          }
+        }
+
+        // Increment coupon count if used
+        if (appliedCouponCode) {
+          await tx.coupon.updateMany({
+            where: { code: appliedCouponCode },
+            data: { usedCount: { increment: 1 } },
+          });
+        }
+
+        return createdOrder;
+      });
+
+      // Dispatch order confirmation notifications asynchronously
+      triggerOrderStatusNotifications(
+        {
+          orderNumber: order.orderNumber,
+          customerName: order.customerName,
+          phone: order.phone,
+          email: order.email,
+          total: order.total,
+          subtotal: order.subtotal,
+          discount: order.discount,
+          shipping: order.shipping,
+          address: order.address,
+          city: order.city,
+          state: order.state,
+          pincode: order.pincode,
+          items: order.items,
+        },
+        'placed'
+      ).catch(() => {});
+
+      return NextResponse.json({
+        success: true,
+        isCOD: true,
+        orderNumber: order.orderNumber,
+        total: finalTotal,
+        message: 'COD Order placed successfully!',
+      });
+    }
+
+    // ------------------------------------------------------------------------
+    // CASE 2: Prepaid via Razorpay
+    // ------------------------------------------------------------------------
     const order = await prisma.order.create({
       data: {
         orderNumber,
@@ -214,12 +369,14 @@ export async function POST(req: NextRequest) {
         address: address.trim(),
         city: city.trim(),
         state: state.trim(),
-        pincode: pincode.trim(),
+        pincode: cleanPincode,
         subtotal: calculatedSubtotal,
         discount,
         shipping: finalShipping,
+        codFee: 0,
         total: finalTotal,
         couponCode: appliedCouponCode,
+        paymentMethod: 'PREPAID',
         paymentStatus: 'pending',
         status: 'placed',
         items: {
@@ -234,7 +391,6 @@ export async function POST(req: NextRequest) {
       },
     });
 
-    // Create Razorpay Order
     const razorpayKeyId = process.env.RAZORPAY_KEY_ID || 'rzp_test_placeholderKeyId';
     const razorpayKeySecret = process.env.RAZORPAY_KEY_SECRET || 'placeholderSecretKey';
     let razorpayOrderId = `order_${Date.now()}_${Math.random().toString(36).substring(2, 8)}`;
@@ -268,6 +424,7 @@ export async function POST(req: NextRequest) {
 
     return NextResponse.json({
       success: true,
+      isCOD: false,
       orderNumber: order.orderNumber,
       razorpayOrderId,
       amount: finalTotal * 100,

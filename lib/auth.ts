@@ -277,7 +277,7 @@ export const authOptions: NextAuthOptions = {
     },
   },
   pages: {
-    signIn: `${process.env.ADMIN_BASE_PATH || '/studio-alumar-9f7x2k'}/login`,
-    error: `${process.env.ADMIN_BASE_PATH || '/studio-alumar-9f7x2k'}/login`,
+    signIn: `${process.env.ADMIN_BASE_PATH || '/admin8080'}/login`,
+    error: `${process.env.ADMIN_BASE_PATH || '/admin8080'}/login`,
   },
 };

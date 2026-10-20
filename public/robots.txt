@@ -1,5 +1,5 @@
 User-agent: *
 Allow: /
 Disallow: /api
-Disallow: /studio-alumar-9f7x2k
+Disallow: /admin8080
 Sitemap: https://al-umers.vercel.app/sitemap.xml

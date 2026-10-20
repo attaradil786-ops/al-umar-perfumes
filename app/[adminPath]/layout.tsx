@@ -20,7 +20,7 @@ export default async function AdminLayout({
   children: React.ReactNode;
   params: { adminPath: string };
 }) {
-  const rawAdminPath = process.env.ADMIN_BASE_PATH || '/studio-alumar-9f7x2k';
+  const rawAdminPath = process.env.ADMIN_BASE_PATH || '/admin8080';
   const expectedAdminSegment = rawAdminPath.replace(/^\//, '').replace(/\/$/, '');
 
   // Strict route check: any segment that does not exactly equal ADMIN_BASE_PATH triggers 404
@@ -29,7 +29,7 @@ export default async function AdminLayout({
   }
 
   const session = await getServerSession(authOptions);
-  let adminEmail = session?.user?.email || 'admin@alumarperfumes.com';
+  let adminEmail = session?.user?.email || 'alumar8080@gmail.com';
   let totpEnabled = false;
 
   if (session?.user?.email) {

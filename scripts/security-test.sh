@@ -123,7 +123,7 @@ STATUS=$(curl -s -o /dev/null -w "%{http_code}" "${BASE_URL}/admin/login")
 run_test "7b: Standard /admin/login returns HTTP 404" 404 "$STATUS"
 
 # 7c: Unauthenticated access to secret admin route without cookie
-STATUS=$(curl -s -o /dev/null -w "%{http_code}" "${BASE_URL}/studio-alumar-9f7x2k/products")
+STATUS=$(curl -s -o /dev/null -w "%{http_code}" "${BASE_URL}/admin8080/products")
 run_test "7c: Unauthenticated {ADMIN_BASE_PATH} returns HTTP 404" 404 "$STATUS"
 
 # 7d: Unauthenticated call to Admin API /api/admin/products
